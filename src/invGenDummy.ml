@@ -31,6 +31,7 @@ This file is part of the Kind verifier
 open Lib
 
 
+
 (* Seconds before sending the next invariant *)
 let period = 0.5
 
@@ -89,7 +90,10 @@ let rec inv_gen_dummy k =
 let main _ = 
 
   (* Run loop *)
-  inv_gen_dummy 0
+  Kind1.Lus_assertions.get_assertion_term; ()
+  
+  Kind1.Kind_inv_loop.mainloop Flags.inputfile () 
+  
 
 
 (* 
