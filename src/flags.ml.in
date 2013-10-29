@@ -282,7 +282,7 @@ let interpreter_input_file_default = ""
 
 type interpreter_steps = int 
 
-let interpreter_steps_default = 0
+let interpreter_steps_default = 2
 
 (* ********** *) 
 

@@ -46,17 +46,15 @@ let on_exit () = ()
 
 (* Main entry point *)
 let main input_file transSys =
+ (* val InputParser.parse_input : string -> (StateVar.t * (Term.t list)) list *)
   let inputs = InputParser.read_file input_file in
-
+  Event.log `Interpreter Event.L_fatal "list length: %d\n" (List.length inputs);
   (* Number of instants input *)
   let k = Flags.interpreter_steps () in
 
   Event.log `Interpreter Event.L_fatal "Interpreter running up to k = %d" k;
 
   (* let inputs = InputParser.main x in *)
-
-  (* Number of instants to simulate *)
-  let l = 3 in
 
   (* Determine logic for the SMT solver *)
   let logic = TransSys.get_logic transSys in
@@ -67,6 +65,7 @@ let main input_file transSys =
   in
       
   let state_vars = TransSys.state_vars transSys in
+  Event.log `Interpreter Event.L_fatal "#$#$#Final list length: %d\n" (List.length state_vars);
   
   (* Provide the initial case *)
   S.assert_term solver (TransSys.init_of_bound 0 transSys);
@@ -88,10 +87,6 @@ let main input_file transSys =
       )
       
   in
-
-  (* val InputParser.parse_input : string -> (StateVar.t * (Term.t list)) list *)
-  (* let inputs = InputParser.parse_input input_file in *)
-  
 
   List.iter
 

@@ -361,9 +361,11 @@ let vars z =
    We return all declared state variables regardless of those used in
    the transition system. *)
 let state_vars z = 
-
+(* remove "not (StateVar.is_definition sv)";
+   Todo: filter for stateful variables 
+*)
   StateVar.fold
-    (fun sv a -> if not (StateVar.is_definition sv) then sv :: a else a)
+    (fun sv a -> if true then sv :: a else a)
     []
 
 
