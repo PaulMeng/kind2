@@ -1,31 +1,19 @@
-(*
-This file is part of the Kind verifier
+(* This file is part of the Kind 2 model checker.
 
-* Copyright (c) 2007-2013 by the Board of Trustees of the University of Iowa, 
-* here after designated as the Copyright Holder.
-* All rights reserved.
-*
-* Redistribution and use in source and binary forms, with or without
-* modification, are permitted provided that the following conditions are met:
-*     * Redistributions of source code must retain the above copyright
-*       notice, this list of conditions and the following disclaimer.
-*     * Redistributions in binary form must reproduce the above copyright
-*       notice, this list of conditions and the following disclaimer in the
-*       documentation and/or other materials provided with the distribution.
-*     * Neither the name of the University of Iowa, nor the
-*       names of its contributors may be used to endorse or promote products
-*       derived from this software without specific prior written permission.
-*
-* THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDER ''AS IS'' AND ANY
-* EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-* WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-* DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY
-* DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-* (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-* LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
-* ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-* (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+   Copyright (c) 2014 by the Board of Trustees of the University of Iowa
+
+   Licensed under the Apache License, Version 2.0 (the "License"); you
+   may not use this file except in compliance with the License.  You
+   may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0 
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+   implied. See the License for the specific language governing
+   permissions and limitations under the License. 
+
 *)
 
 open Lib
@@ -56,7 +44,8 @@ let string_of_expr t =
 
 (* The defined logics in SMTLIB *)
 type logic = 
-  [ `AUFLIA
+  [ `detect
+  | `AUFLIA
   | `AUFLIRA
   | `AUFNIRA
   | `LRA 
@@ -330,65 +319,80 @@ let symbol_of_hstring s =
    function symbols and variables. *)
 let const_of_smtlib_token b t = 
 
-  (* Empty strings are invalid *)
-  if HString.length t = 0 then
+  let res = 
 
-    (* String is empty *)
-    raise (Invalid_argument "num_expr_of_smtlib_token")
+    (* Empty strings are invalid *)
+    if HString.length t = 0 then
 
-  else
+      (* String is empty *)
+      raise (Invalid_argument "num_expr_of_smtlib_token")
 
-    try
-      
-      (* Return decimal of string *)
-      Term.mk_dec (decimal_of_hstring t)
-        
-    (* String is not a decimal *)
-    with Invalid_argument _ -> 
-      
-      try 
-        
+    else
+
+      try
+
         (* Return numeral of string *)
-        Term.mk_num (numeral_of_hstring t)
+        Term.mk_num (Numeral.of_string (HString.string_of_hstring t))
 
+      (* String is not a decimal *)
       with Invalid_argument _ -> 
-        
-        try 
-          
-          (* Return bitvector of string *)
-          Term.mk_bv (bitvector_of_hstring t)
-            
-        with Invalid_argument _ -> 
-          
-          try 
-            
-            (* Return symbol of string *)
-            Term.mk_bool (bool_of_hstring t)
 
-          (* String is not an interpreted symbol *)
+        try 
+
+          (* Return decimal of string *)
+          Term.mk_dec (Decimal.of_string (HString.string_of_hstring t))
+
+        with Invalid_argument _ -> 
+
+          try 
+
+            (* Return bitvector of string *)
+            Term.mk_bv (bitvector_of_hstring t)
+
           with Invalid_argument _ -> 
 
             try 
 
-              (* Return bound symbol *)
-              Term.mk_var (List.assq t b)
-                
-            (* String is not a bound variable *)
-            with Not_found -> 
-              
-              try 
-                
-                (* Return uninterpreted constant *)
-                Term.mk_uf 
-                  (UfSymbol.uf_symbol_of_string (HString.string_of_hstring t))
-                  []
+              (* Return symbol of string *)
+              Term.mk_bool (bool_of_hstring t)
 
+            (* String is not an interpreted symbol *)
+            with Invalid_argument _ -> 
+
+              try 
+
+                (* Return bound symbol *)
+                Term.mk_var (List.assq t b)
+
+              (* String is not a bound variable *)
               with Not_found -> 
 
-                (* Cannot convert to an expression *)
-                failwith "Invalid constant symbol in S-expression"
+                try 
 
-                
+                  (* Return uninterpreted constant *)
+                  Term.mk_uf 
+                    (UfSymbol.uf_symbol_of_string (HString.string_of_hstring t))
+                    []
+
+                with Not_found -> 
+
+                  debug smtexpr 
+                      "const_of_smtlib_token %s failed" 
+                      (HString.string_of_hstring t)
+                  in
+
+                  (* Cannot convert to an expression *)
+                  failwith "Invalid constant symbol in S-expression"
+
+  in
+
+  debug smtexpr 
+      "const_of_smtlib_token %s is %a" 
+      (HString.string_of_hstring t)
+      Term.pp_print_term res
+  in
+
+  res
 
 (* Convert a string S-expression to an expression *)
 let rec expr_of_string_sexpr' b = function 
@@ -580,9 +584,10 @@ let rec var_of_smtexpr e =
                 with Not_found -> 
 
                   invalid_arg 
-                    "var_of_smtexpr: \
-                     No state variable found for uninterpreted function symbol"
-
+                    (Format.asprintf 
+                       "var_of_smtexpr: %a\
+                        No state variable found for uninterpreted function symbol"
+                       Term.pp_print_term e)
               in
 
               (* Create state variable instance *)
@@ -592,8 +597,10 @@ let rec var_of_smtexpr e =
             | _ -> 
 
               invalid_arg 
-                "var_of_smtexpr: \
-                 Invalid argument to uninterpreted function"
+                (Format.asprintf 
+                   "var_of_smtexpr: %a\
+                    Invalid argument to uninterpreted function"
+                   Term.pp_print_term e)
 
         )
 
@@ -651,7 +658,7 @@ let quantified_smtexpr_of_term quantifier vars term =
             type converted to an SMT sort *)
          let v' = 
            Var.mk_temp_var 
-             (HString.mk_hstring (sv ^ string_of_numeral o))
+             (HString.mk_hstring (sv ^ Numeral.string_of_numeral o))
              t'
          in
 
@@ -847,11 +854,19 @@ let check_sat_response_of_sexpr = function
 let rec get_value_response_of_sexpr' accum = function 
   | [] -> (Success, List.rev accum)
   | HStringSExpr.List [ e; v ] :: tl -> 
-    get_value_response_of_sexpr' 
-      ((((expr_of_string_sexpr e) :> t), 
-        ((expr_of_string_sexpr v :> t))) :: 
-          accum) 
-      tl
+
+    (debug smtexpr
+        "get_value_response_of_sexpr: %a is %a"
+        HStringSExpr.pp_print_sexpr e
+        HStringSExpr.pp_print_sexpr v
+     in
+     
+     get_value_response_of_sexpr' 
+       ((((expr_of_string_sexpr e) :> t), 
+         ((expr_of_string_sexpr v :> t))) :: 
+        accum) 
+       tl)
+
   | _ -> invalid_arg "get_value_response_of_sexpr"
 
 (* Return a solver response to a get-value command as expression pairs *)

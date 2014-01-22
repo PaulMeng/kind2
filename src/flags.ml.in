@@ -1,31 +1,19 @@
-(*
-This file is part of the Kind verifier
+(* This file is part of the Kind 2 model checker.
 
-* Copyright (c) 2007-2013 by the Board of Trustees of the University of Iowa, 
-* here after designated as the Copyright Holder.
-* All rights reserved.
-*
-* Redistribution and use in source and binary forms, with or without
-* modification, are permitted provided that the following conditions are met:
-*     * Redistributions of source code must retain the above copyright
-*       notice, this list of conditions and the following disclaimer.
-*     * Redistributions in binary form must reproduce the above copyright
-*       notice, this list of conditions and the following disclaimer in the
-*       documentation and/or other materials provided with the distribution.
-*     * Neither the name of the University of Iowa, nor the
-*       names of its contributors may be used to endorse or promote products
-*       derived from this software without specific prior written permission.
-*
-* THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDER ''AS IS'' AND ANY
-* EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-* WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-* DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY
-* DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-* (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-* LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
-* ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-* (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-* SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+   Copyright (c) 2014 by the Board of Trustees of the University of Iowa
+
+   Licensed under the Apache License, Version 2.0 (the "License"); you
+   may not use this file except in compliance with the License.  You
+   may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0 
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+   implied. See the License for the specific language governing
+   permissions and limitations under the License. 
+
 *)
 
 (* WARNING: DO NOT EDIT THE .ML FILE --- CHANGES WILL BE OVERWRITTEN 
@@ -37,6 +25,86 @@ This file is part of the Kind verifier
 *)
 
 open Lib
+
+(*
+
+type ('a, 'b) flag =
+  { longname : string;
+    shortname : string option;
+    mutable value : 'a;
+    of_arg : 'a -> 'b -> 'a;
+    pp : Format.formatter -> 'a -> unit }
+    
+
+type int_flag = (int, int) flag 
+
+type float_flag = (float, float) flag 
+
+type bool_flag = (bool, bool) flag
+
+type unit_flag = (unit, bool) flag 
+
+type 'a string_flag = ('a, string) flag
+
+
+
+type smtsolver = [ `Z3_SMTLIB | `Z3_API | `CVC4_SMTLIB | `CVC4_API | `Yices ]
+
+let smtsolver_of_string = function
+  | "Z3" -> `Z3_SMTLIB
+  | "Z3_SMTLIB" -> `Z3_SMTLIB
+  | "Z3_API" -> `Z3_API
+  | "CVC4" -> `CVC4_SMTLIB
+  | "CVC4_SMTLIB" -> `CVC4_SMTLIB
+  | "CVC4_API" -> `CVC4_API
+  | "Yices" -> `Yices
+  | _ -> raise (Invalid_argument "smtsolver_of_string")
+
+let pp_print_smtsolver ppf = 
+  let p = Format.fprintf ppf in 
+  function 
+    | `Z3_SMTLIB -> p "Z3_SMTLIB"
+    | `Z3_API -> p "Z3_API"
+    | `CVC4_SMTLIB -> p "CVC4_SMTLIB"
+    | `CVC4_API -> p "CVC4_API"
+    | `Yices -> p "Yices"
+
+let smtsolver_flag = 
+  { longname = "smtsolver";
+    shortname = None;
+    value = `Z3_SMTLIB;
+    of_arg = (function _ -> smtsolver_of_string);
+    pp = pp_print_smtsolver }
+
+
+let kind_module_of_string = function
+  | "PDR" -> `PDR
+  | "BMC" -> `BMC
+  | "IND" -> `IND
+  | "INVGEN" -> `INVGEN
+  | "interpreter" -> `Interpreter
+  | _ -> raise (Invalid_argument "smtsolver_of_string")
+
+
+let pp_print_kind_module ppf = 
+  let p = Format.fprintf ppf in 
+  function
+    | `PDR -> p "PDR"
+    | `BMC -> p "BMC"
+    | `IND -> p "IND"
+    | `INVGEN -> p "INVGEN"
+    | `Interpreter -> p "interpreter"
+
+
+let enable_flag = 
+  { longname = "enable";
+    shortname = Some "e";
+    value = [];
+    of_arg = (function curval -> (function arg -> kind_module_of_string arg :: curval));
+    pp = (pp_print_list pp_print_kind_module ",@ ") }
+
+*)
+
 
 (* ********************************************************************** *)
 (* Types and defaults for flags                                            *)
@@ -107,6 +175,25 @@ let string_of_smtsolver = function
 let smtsolver_values = "Z3, CVC4"
 
 let smtsolver_default = `Z3_SMTLIB
+
+(* ********** *) 
+
+type smtlogic = [ `QF_UFLIA | `QF_UFLRA | `detect ]
+    
+let smtlogic_of_string = function
+  | "LIA" -> `QF_UFLIA
+  | "LRA" -> `QF_UFLRA
+  | "detect" -> `detect
+  | _ -> raise (Arg.Bad "Bad value for --smtlogic")
+
+let string_of_smtlogic = function 
+  | `QF_UFLIA -> "LIA"
+  | `QF_UFLRA -> "LRA"
+  | `detect -> "detect"
+
+let smtlogic_values = "LIA, LRA, detect"
+
+let smtlogic_default = `detect
 
 (* ********** *) 
 
@@ -217,7 +304,7 @@ type pdr_tighten_to_unsat_core = bool
     
 let string_of_pdr_tighten_to_unsat_core = string_of_bool
 
-let pdr_tighten_to_unsat_core_default = false
+let pdr_tighten_to_unsat_core_default = true
 
 (* ********** *) 
 
@@ -237,20 +324,39 @@ let pdr_prop_in_last_frame_default = false
 
 (* ********** *) 
 
-type pdr_qe = [ `Z3 | `Cooper ]
+type pdr_qe = [ `Z3 | `Z3_impl | `Cooper ]
     
 let pdr_qe_of_string = function
   | "Z3" -> `Z3
+  | "Z3-impl" -> `Z3_impl
   | "cooper" -> `Cooper
-  | _ -> raise (Arg.Bad "Bad value for -pdr_qe")
+  | _ -> raise (Arg.Bad "Bad value for --pdr_qe")
 
 let string_of_pdr_qe = function 
   | `Z3 -> "Z3"
+  |  `Z3_impl -> "Z3-impl"
   | `Cooper -> "cooper"
 
-let pdr_qe_values = "Z3, cooper"
+let pdr_qe_values = "Z3, Z3-impl, cooper"
 
-let pdr_qe_default = `Z3
+let pdr_qe_default = `Cooper
+
+(* ********** *) 
+
+type pdr_extract = [ `First | `Vars ]
+    
+let pdr_extract_of_string = function
+  | "first" -> `First
+  | "vars" -> `Vars
+  | _ -> raise (Arg.Bad "Bad value for --pdr_extract")
+
+let string_of_pdr_extract = function 
+  | `First -> "first"
+  | `Vars -> "vars"
+
+let pdr_extract_values = "first, vars"
+
+let pdr_extract_default = `First
 
 (* ********** *) 
  
@@ -267,6 +373,39 @@ type cooper_general_lbound = bool
 let cooper_general_lbound_values = "true, false"
  
 let cooper_general_lbound_default = false
+
+(* ********** *) 
+
+type interpreter_input_file = string 
+
+let interpreter_input_file_of_string s = s
+
+let string_of_interpreter_input_file s = s 
+
+let interpreter_input_file_default = ""
+
+(* ********** *) 
+
+type interpreter_steps = int 
+
+let interpreter_steps_default = 0
+
+(* ********** *) 
+
+type input_format = [ `Lustre | `Horn ]
+    
+let input_format_of_string = function
+  | "lustre" -> `Lustre
+  | "horn" -> `Horn
+  | _ -> raise (Arg.Bad "Bad value for --input-format")
+
+let string_of_input_format = function 
+  | `Lustre -> "lustre"
+  | `Horn -> "horn"
+
+let input_format_values = "lustre, horn"
+
+let input_format_default = `Lustre
 
 (* ********** *) 
 
@@ -291,10 +430,12 @@ type flags =
     { mutable timeout_wall : float;
       mutable timeout_virtual : float;
       mutable smtsolver : smtsolver;
+      mutable smtlogic : smtlogic;
       mutable z3_bin : z3_bin;
       mutable cvc4_bin : cvc4_bin;
       mutable enable : enable;
       mutable pdr_qe : pdr_qe;
+      mutable pdr_extract : pdr_extract;
       mutable pdr_subs_timeout : pdr_subs_timeout;
       mutable pdr_check_inductive : pdr_check_inductive;
       mutable pdr_fwd_prop_check_multi : pdr_fwd_prop_check_multi;
@@ -306,10 +447,13 @@ type flags =
       mutable pdr_prop_in_last_frame : pdr_prop_in_last_frame;
       mutable cooper_order_var_by_elim : cooper_order_var_by_elim;
       mutable cooper_general_lbound : cooper_general_lbound;
+      mutable interpreter_input_file : interpreter_input_file;
+      mutable interpreter_steps : interpreter_steps;
       mutable debug : string list;
       mutable debug_log : string option;
       mutable log_level : Event.log_level;
       mutable log_format_xml : bool;
+      mutable input_format : input_format;
       mutable input_file : string option }
     
 (* Defaults for all flags *)
@@ -317,10 +461,12 @@ let flags =
   { timeout_wall = timeout_wall_default;
     timeout_virtual = timeout_virtual_default;
     smtsolver = smtsolver_default;
+    smtlogic = smtlogic_default;
     z3_bin = z3_bin_default;
     cvc4_bin = cvc4_bin_default;
     enable = enable_default_init;
     pdr_qe = pdr_qe_default;
+    pdr_extract = pdr_extract_default;
     pdr_subs_timeout = pdr_subs_timeout_default;
     pdr_check_inductive = pdr_check_inductive_default;
     pdr_fwd_prop_check_multi = pdr_fwd_prop_check_multi_default;
@@ -332,10 +478,13 @@ let flags =
     pdr_prop_in_last_frame = pdr_prop_in_last_frame_default;
     cooper_order_var_by_elim = cooper_order_var_by_elim_default;
     cooper_general_lbound = cooper_general_lbound_default;
+    interpreter_input_file = interpreter_input_file_default;
+    interpreter_steps = interpreter_steps_default;
     debug = debug_default;
     debug_log = debug_log_default;
     log_level = log_level_default;
     log_format_xml = log_format_xml_default;
+    input_format = input_format_default;
     input_file = None } 
 
 (* ********** *) 
@@ -364,6 +513,15 @@ let smtsolver_spec =
   ("--smtsolver", 
    Arg.String smtsolver_action, 
    Format.sprintf "choose SMT solver (available: %s, default: %s)" smtsolver_values (string_of_smtsolver smtsolver_default))
+
+(* ********** *) 
+
+let smtlogic_action o = flags.smtlogic <- (smtlogic_of_string o)
+  
+let smtlogic_spec = 
+  ("--smtlogic", 
+   Arg.String smtlogic_action, 
+   Format.sprintf "choose SMT logic (available: %s, default: %s)" smtlogic_values (string_of_smtlogic smtlogic_default))
 
 (* ********** *) 
 
@@ -400,6 +558,15 @@ let pdr_qe_spec =
   ("--pdr_qe", 
    Arg.String pdr_qe_action, 
    Format.sprintf "(PDR) choose quantifier elimination algorithm (available: %s, default: %s)" pdr_qe_values (string_of_pdr_qe pdr_qe_default))
+
+(* ********** *) 
+
+let pdr_extract_action o = flags.pdr_extract <- (pdr_extract_of_string o)
+  
+let pdr_extract_spec = 
+  ("--pdr_extract", 
+   Arg.String pdr_extract_action, 
+   Format.sprintf "(PDR) Heuristics for extraction of implicant (available: %s, default: %s)" pdr_extract_values (string_of_pdr_extract pdr_extract_default))
 
 (* ********** *) 
 
@@ -504,6 +671,24 @@ let cooper_general_lbound_spec =
 
 (* ********** *) 
 
+let interpreter_input_file_action o = flags.interpreter_input_file <- o
+                                       
+let interpreter_input_file_spec = 
+  ("--interpreter_input_file", 
+   Arg.String interpreter_input_file_action, 
+   Format.sprintf "(Interpreter) Read input from file")
+
+(* ********** *) 
+
+let interpreter_steps_action o = flags.interpreter_steps <- o
+                                       
+let interpreter_steps_spec = 
+  ("--interpreter_steps", 
+   Arg.Int interpreter_steps_action, 
+   Format.sprintf "(Interpreter) Run number of steps, override the number of steps given in the input file")
+
+(* ********** *) 
+
 let debug_action o = flags.debug <- o :: flags.debug 
   
 let debug_spec = 
@@ -563,6 +748,15 @@ let log_format_xml_spec =
    Arg.Unit (log_format_xml_action true), 
    Format.sprintf "Output in XML format")
 
+(* ********** *) 
+
+let input_format_action o = flags.input_format <- (input_format_of_string o)
+  
+let input_format_spec = 
+  ("--input-format", 
+   Arg.String input_format_action, 
+   Format.sprintf "Format of input file (available: %s, default: %s)" input_format_values (string_of_input_format input_format_default))
+
 
 (* ********************************************************************** *)
 (* Pretty-printing of flags                                               *)
@@ -579,6 +773,8 @@ let timeout_virtual () = flags.timeout_virtual
 
 let smtsolver () = flags.smtsolver 
 
+let smtlogic () = flags.smtlogic 
+
 let z3_bin () = flags.z3_bin
 
 let cvc4_bin () = flags.cvc4_bin
@@ -586,6 +782,8 @@ let cvc4_bin () = flags.cvc4_bin
 let enable () = flags.enable 
 
 let pdr_qe () = flags.pdr_qe 
+
+let pdr_extract () = flags.pdr_extract 
 
 let pdr_subs_timeout () = flags.pdr_subs_timeout 
 
@@ -609,6 +807,10 @@ let cooper_order_var_by_elim () = flags.cooper_order_var_by_elim
 
 let cooper_general_lbound () = flags.cooper_general_lbound
 
+let interpreter_input_file () = flags.interpreter_input_file
+
+let interpreter_steps () = flags.interpreter_steps
+
 let debug () = flags.debug
 
 let debug_log () = flags.debug_log
@@ -616,6 +818,8 @@ let debug_log () = flags.debug_log
 let log_level () = flags.log_level
 
 let log_format_xml () = flags.log_format_xml
+
+let input_format () = flags.input_format 
 
 let input_file () = match flags.input_file with 
   | Some f -> f 
@@ -645,6 +849,9 @@ and speclist =
     (* Set SMT solver *)
     smtsolver_spec;
 
+    (* Set SMT logic *)
+    smtlogic_spec;
+
     (* Set executable for Z3 solver *)
     z3_bin_spec;
 
@@ -656,6 +863,9 @@ and speclist =
 
     (* Set QE in PDR *)
     pdr_qe_spec;
+
+    (* Heuristic for extraction of implicant *)
+    pdr_extract_spec;
 
     (* Set timeout for subsumption check in frames in PDR *)
     pdr_subs_timeout_spec;
@@ -688,6 +898,13 @@ and speclist =
     cooper_order_var_by_elim_spec;
     cooper_general_lbound_spec;
 
+    (* Read input from file *)
+    interpreter_input_file_spec;
+
+    (* Run number of steps, override the number of steps given in the
+       input file *)
+    interpreter_steps_spec;
+
     (* Enable debug output *)
     debug_spec;
 
@@ -704,6 +921,9 @@ and speclist =
 
     (* Set output format to XML *)
     log_format_xml_spec;
+
+    (* Set input format *)
+    input_format_spec;
 
     (* Display help *)
     ("-help", 

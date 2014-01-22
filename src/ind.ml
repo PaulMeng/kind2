@@ -126,7 +126,7 @@ let rec filter_goal_list solver ts k goal_pairs candidate_infos =
 		 let abstract_model = List.map (
       fun (var, value) -> 
       ((Var.bump_offset_of_state_var_instance 
-          (Lib.numeral_of_int (-1 * k)) var),
+          (Numeral.of_int (-1 * k)) var),
         value)
     ) model 
     in
@@ -335,6 +335,7 @@ let rec ind solver ts k goal_pairs candidate_infos premises invariants_1 premise
       (* Send the invariant. *)
       (* Event.invariant 
         (Term.mk_and (List.map snd all_candidate_pairs)); *)
+
        List.iter (
 					fun x ->
 					Event.proved 
@@ -342,8 +343,8 @@ let rec ind solver ts k goal_pairs candidate_infos premises invariants_1 premise
 					x
 					)
           (all_candidate_pairs);
-      (*List.iter (Event.proved `IND (Some k)) all_candidate_pairs;*)
-      
+      List.iter (Event.proved `IND (Some k)) all_candidate_pairs;
+
 (*
       (* Print out all the properties being proved. *)
       List.iter 
@@ -459,8 +460,9 @@ let rec ind solver ts k goal_pairs candidate_infos premises invariants_1 premise
                      end) all_candidate_pairs;
 
                     (* Send the invariant. *)
-                     List.iter ( fun x -> Event.proved `IND x ) (all_candidate_pairs);
-											
+
+                    List.iter (Event.proved `IND (Some k)) all_candidate_pairs;
+
 (*
                     (* Print out all the properties being proved. *)
                     List.iter 
