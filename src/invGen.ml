@@ -97,7 +97,7 @@ let send_invariant x  =
 	if
 	  List.exists(
 			fun v -> 
-				(int_of_numeral (Var.offset_of_state_var_instance v)) = 1
+				(Numeral.to_int (Var.offset_of_state_var_instance v)) = 1
     ) (TransSys.vars_of_term invariant)
 	then
 		(

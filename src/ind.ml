@@ -335,14 +335,7 @@ let rec ind solver ts k goal_pairs candidate_infos premises invariants_1 premise
       (* Send the invariant. *)
       (* Event.invariant 
         (Term.mk_and (List.map snd all_candidate_pairs)); *)
-
-       List.iter (
-					fun x ->
-					Event.proved 
-          `IND
-					x
-					)
-          (all_candidate_pairs);
+        
       List.iter (Event.proved `IND (Some k)) all_candidate_pairs;
 
 (*
@@ -620,13 +613,8 @@ let rec ind solver ts k goal_pairs candidate_infos premises invariants_1 premise
         let all_candidate_pairs = List.map fst all_candidate_infos in
       
         (* Send the invariant. *)
-        List.iter (
-					fun x ->
-					Event.proved 
-          `IND
-					x
-					)
-          all_candidate_pairs;
+
+        List.iter (Event.proved `IND (Some k)) all_candidate_pairs;
 
         TransSys.log_property_valid "inductive step" (List.map fst all_candidate_pairs);
  
@@ -711,7 +699,7 @@ let main transSys =
 	          if 
 					    List.for_all 
 	               (fun v -> 
-							     (int_of_numeral (Var.offset_of_state_var_instance v)) = 0) 
+							     (Numeral.to_int (Var.offset_of_state_var_instance v)) = 0) 
 						     (TransSys.vars_of_term invar) 
 					  then
 						  (

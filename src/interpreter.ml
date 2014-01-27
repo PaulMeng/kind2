@@ -142,46 +142,33 @@ let main input_file transSys =
     inputs;
     
 
-  (**Get value for each variable*)
-  
-  if (S.check_sat solver) then		
-	let rec aux acc state_var k =
-		if (int_of_numeral k) < 0 then
-			let model = S.get_model solver acc in
-			List.map snd model
-		else
-			aux ((Var.mk_state_var_instance state_var k)::acc) state_var (decr_numeral k)
-	in
+    (**Get value for each variable*)
+  if (S.check_sat solver) then
+                
+        let rec aux acc state_var k =
+                
+                if (Numeral.to_int k) < 0 then
+                        
+                        let model = S.get_model solver acc in
+                        
+                        List.map snd model
+                        
+                else
+                        
+                        aux ((Var.mk_state_var_instance state_var k)::acc) state_var (Numeral.pred k)
+        in
     let v = 
+                        
       List.map 
+                        
         (fun sv -> 
-           (sv,(aux [] sv (numeral_of_int k))))
-        state_vars 
-    in
-	Event.log_counterexample `Interpreter v
-	
-		if (Numeral.to_int k) < 0 then
-			
-			let model = S.get_model solver acc in
-			
-			List.map snd model
-			
-		else
-			
-			aux ((Var.mk_state_var_instance state_var k)::acc) state_var (Numeral.pred k)
-	in
-    let v = 
-			
-      List.map 
-			
-        (fun sv -> 
-					
+                                        
            (sv,(aux [] sv (Numeral.of_int (k-1)))))
-					
+                                        
         state_vars 
-				
+                                
     in
-		
+                
     Event.log_counterexample `Interpreter v
 
   else

@@ -187,7 +187,7 @@ let rec filter_property_list solver ts abstract_var_list concrete_var_list k pro
 	(*	let prop_off_state = List.map (
       fun (prop_name, prop) -> 				
         ((TranSys.bump_state 
-            (Lib.numeral_of_int (k)) var)
+            (Numeral.of_int (k)) var)
           , value)
     ) ts.TransSys.props 
 		
@@ -226,22 +226,6 @@ let rec filter_property_list solver ts abstract_var_list concrete_var_list k pro
       (Event.disproved `BMC (Some k)) 
       (List.map fst disproved_prop_pairs);
     
-(*
-
-    List.iter(
-      fun (dis_prop_name, dis_prop) ->
-
-        let property_names = List.map fst transSys.TransSys.props in
-
-        (* Event.log 0 "Success: property proved in PDR@." *)
-        TransSys.log_property_valid "PDR" property_names
-
-
-        Event.log 
-          0 
-          "Property %s disproved for %d induction"
-          dis_prop_name
-          (k + 1)
 
 
     (* Print out the counter example *)
@@ -489,7 +473,7 @@ let main transSys =
 	          if 
 					    List.for_all 
 	               (fun v -> 
-							     (int_of_numeral (Var.offset_of_state_var_instance v)) = 0) 
+							     (Numeral.to_int (Var.offset_of_state_var_instance v)) = 0) 
 						     (TransSys.vars_of_term invar) 
 					  then
 						  (

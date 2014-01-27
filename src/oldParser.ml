@@ -676,7 +676,7 @@ let rec il_expression_to_term init = function
             | L_BOOL -> Type.t_bool
             | L_INT -> Type.t_int
             | L_INT_RANGE (l, u) -> 
-              Type.mk_int_range (numeral_of_int l) (numeral_of_int u)
+              Type.mk_int_range (Numeral.of_int l) (Numeral.of_int u)
             | L_REAL -> Type.t_real
 
             | _ -> 
@@ -691,7 +691,7 @@ let rec il_expression_to_term init = function
         in
     let var' = 
           Var.mk_state_var_instance 
-            state_var (if init then Lib.numeral_of_int 0 else Lib.numeral_of_int 1)
+            state_var (if init then Numeral.zero else Numeral.one)
         in
     Term.mk_var var'
     
@@ -964,7 +964,7 @@ let rec il_expression_to_term init = function
               failwith ("Unsupported type " ^ (lustre_type_to_string t))
             | Some tt', t when tt' = t -> 
               failwith ("Unsupported type " ^ (lustre_type_to_string t))
-            | Some L_INT, L_INT_RANGE(l, u) -> Type.mk_int_range (numeral_of_int l) (numeral_of_int u)
+            | Some L_INT, L_INT_RANGE(l, u) -> Type.mk_int_range (Numeral.of_int l) (Numeral.of_int u)
             | Some tt', t -> 
               failwith 
                 ("Type mismatch for " ^ 
