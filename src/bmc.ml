@@ -49,7 +49,7 @@ let pp_print_stat ppf =
 
 (* Clean up before exit *)
 let on_exit () =
-    
+  Format.printf "BMC on exit";
   (* Stop all timers *)
   Stat.bmc_stop_timers ();
   Stat.smt_stop_timers ();
@@ -366,7 +366,21 @@ let rec bmc solver ts abstract_var_list k prop_pairs invariants_1=
   )
     
   else 
-
+  (* Receiving messages. *)
+  let messages = Event.recv () in
+  
+  (* Terminate when ControlMessage TERM is received.
+     
+     Add all the new invariants. *)
+  List.iter (
+    fun message ->
+      match message with
+       
+      (* Irrelevant message received. *)
+      | _ ->
+        ()      
+  ) messages;
+  
   (* Instantiate the property for step k *)
   let k_prop_pairs = 
     List.map 

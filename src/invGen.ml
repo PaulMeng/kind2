@@ -122,7 +122,7 @@ let main _ =
 		Kind1.Globals.my_solver#set (new Kind1.Solver_yices.solver_yices)
 	      );
   
-  Kind1.OldFlags.do_scratch := false;
+  Kind1.OldFlags.do_scratch := true;
   if !Kind1.OldFlags.do_scratch then
     begin
     	Kind1.Channels.inv_ch := open_out ((Flags.input_file ())^"."^Kind1.Globals.my_solver#get#file_extension^"_inv_offline")

@@ -137,6 +137,7 @@ let rec filter_goal_list solver ts k goal_pairs candidate_infos =
       abstract_model 
       end);
     *)
+		
               
     (* Put the properties satisfying the model into potential_candidate_pairs.
        Put the properties faultifying the model into goal_pairs. *)
@@ -144,7 +145,7 @@ let rec filter_goal_list solver ts k goal_pairs candidate_infos =
       List.partition (
         fun (goal_name, goal_prop) -> 
           Eval.bool_of_value (Eval.eval_term (TransSys.bump_state k goal_prop) model)
-      ) ts.TransSys.props 
+      ) goal_pairs 
     in
       
     (* If all the properties are faultified by the counterexample, nothing is
@@ -363,9 +364,7 @@ let rec ind solver ts k goal_pairs candidate_infos premises invariants_1 premise
 
       while (true) do
       (
-				(debug ind
-         "looping here!"
-          end);
+
         (* Wait for 0.5 seconds. *)
         Lib.minisleep 0.5;
 
@@ -395,10 +394,6 @@ let rec ind solver ts k goal_pairs candidate_infos premises invariants_1 premise
               (* Restart when some goal property is disproved. *)
               | Event.BMCState (bmc_k, disproved_pn_list) ->
 
-                (debug ind
-                  "BMC message of step %d received"
-                  bmc_k
-                  end);
 
                 Event.log `IND Event.L_debug
                   "BMC message of step %d received"
@@ -438,9 +433,6 @@ let rec ind solver ts k goal_pairs candidate_infos premises invariants_1 premise
 
                   if (!bmc_state >= k) then
                   (
-										debug ind
-          					"3. Enter here!!!!!!!!"
-          					end;
                     let all_candidate_pairs = List.map fst candidate_infos in
 										
 										List.iter 
@@ -618,20 +610,19 @@ let rec ind solver ts k goal_pairs candidate_infos premises invariants_1 premise
 
         TransSys.log_property_valid "inductive step" (List.map fst all_candidate_pairs);
  
-(*
+
         (* Print out all the properties being proved. *)
         List.iter 
         (
           fun (cdd_prop_name, cdd_prop) -> 
-            Event.log 
-              0
+            debug ind
               "Property %s proved for k = %d "
               cdd_prop_name
-              k
+              k end;
         ) all_candidate_pairs;
       
         ()
-*)
+
       )
 
     else (
