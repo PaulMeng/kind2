@@ -63,6 +63,14 @@ val bmc_max : unit -> bmc_max
 type ind_compress = bool
 val ind_compress : unit -> ind_compress
 
+(** Generate mode terms as candidate terms *)
+type invgen_mode_invariant = bool
+val invgen_mode_invariant : unit -> invgen_mode_invariant
+
+(** Generate complement of boolean terms as candidate terms *)
+type invgen_bool_complement = bool
+val invgen_bool_complement : unit -> invgen_bool_complement
+
 (** Algorithm for quantifier elimination in PDR *)
 type pdr_qe = [ `Z3 | `Z3_impl | `Z3_impl2 | `Cooper ]
 val pdr_qe : unit -> pdr_qe

@@ -25,9 +25,11 @@ let period = 0.5
 (* Current step in BMC *)
 let bmcK = ref Numeral.zero
 
-
 (* Current step in IND *)
 let indK = ref Numeral.zero
+
+(* Current step in IND *)
+let count = ref Numeral.zero
 
 (* We don't need to clean up anything *)
 let on_exit () = ()
@@ -280,6 +282,7 @@ let rebuild_graph uf_defs model k =
   let chains = 
     THT.fold
       (fun rep term_list init ->
+        
         let (t_list_1, t_list_0) =
           List.partition
             (fun t ->
@@ -320,7 +323,8 @@ let mk_candidate_invariants () =
       (fun rep term_list accum ->
         (List.map
           (fun t ->
-            Term.mk_eq [rep; t])
+            count := Numeral.succ !count;
+            ("inv_"^(Numeral.string_of_numeral !count),Term.mk_eq [rep; t]))
         (List.tl term_list))@accum)
     nodes_hashtl []
   in
@@ -331,7 +335,8 @@ let mk_candidate_invariants () =
       (fun source destination_list accum ->
         (List.map
           (fun t ->
-            Term.mk_implies [source; t])
+            count := Numeral.succ !count;
+            ("inv_"^(Numeral.string_of_numeral !count), Term.mk_implies [source; t]))
         destination_list)@accum)
     outgoing_hashtl []
   in
@@ -349,27 +354,28 @@ let rec create_stable_graph solver ts k candidate_invs =
   in
   
   (*Record current bmc step*)
-  bmcK := Numeral.succ k;
+  bmcK := k;
   
   (*rebuild the graph if some candidate invariants are disproved by BMC*)
   if List.length props_invalid <> 0 then
+    (
+      
+      let uf_defs = ts.TransSys.uf_defs in
     
-    let uf_defs = trans_sys.TransSys.uf_defs in
+      (* Variables at step k *)
+      let k_vars = TransSys.vars_of_bounds ts k k in
   
-    (* Variables in property at step k *)
-    let k_vars = Var.VarSet.elements (Term.vars_of_term p_k) in
-  
-    (* Model for variables of property at step k *)
-    let k_model = S.get_model solver k_vars in
+      (* Model for variables of property at step k *)
+      let k_model = Bmc.S.get_model solver k_vars in
     
-    rebuild_graph uf_defs k_model k;
+      rebuild_graph uf_defs k_model k;
         
-    create_stable_graph solver ts (Numeral.succ k) (mk_candidate_invariants ())
+      create_stable_graph solver ts (Numeral.succ k) (mk_candidate_invariants ())
+    )
 
 let rec produce_invariants bmc_solver ind_solver ts ind_k invariants start = 
   
   if start then
-    
     (*Create a stable implication graph by BMC*)
     create_stable_graph bmc_solver ts Numeral.zero (mk_candidate_invariants ());
   
@@ -389,13 +395,13 @@ let rec produce_invariants bmc_solver ind_solver ts ind_k invariants start =
     (fun (name, term) -> Event.invariant `INVGEN term) 
   props_k_ind;
   
-  if ((List.length props_not_k_ind) <> 0 && (Numeral.gt ind_k bmcK) ) then
+  if ((List.length props_not_k_ind) <> 0 && (Numeral.gt ind_k !bmcK) ) then
     
     ( 
       create_stable_graph 
         bmc_solver 
         ts 
-        (Numeral.succ bmcK) 
+        (Numeral.succ !bmcK) 
         (list_subtract (mk_candidate_invariants ()) invariants)
     );
     
