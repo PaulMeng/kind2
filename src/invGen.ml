@@ -343,6 +343,21 @@ let mk_candidate_invariants () =
   
   (candidate_invariants@candidate_invariants')
 
+(* Compute the difference of two lists*)
+let list_difference l_1 l_2 = 
+  
+  let l_2' = List.map (fun (n, t) -> t) l_2 in
+  
+  List.fold_left
+    (fun acc (name, inv) ->
+      if (List.mem inv l_2') then
+        acc
+      else
+        (name, inv)::acc
+      )
+   [] l_1
+  
+
 (*Call BMC to create stable implication graph*)
 let rec create_stable_graph solver ts k candidate_invs =
   
@@ -385,14 +400,16 @@ let rec produce_invariants bmc_solver ind_solver ts ind_k invariants start =
       ind_solver 
       ts 
       [] 
-      (list_subtract (mk_candidate_invariants ()) invariants)
+      (list_difference (mk_candidate_invariants ()) invariants)
       ind_k
     
   in
   
   (*Send out invariants props_k_ind*)
   List.iter
-    (fun (name, term) -> Event.invariant `INVGEN term) 
+    (fun (name, term) -> 
+      (debug inv "  invariant = %s" name end);
+      Event.invariant `INVGEN term) 
   props_k_ind;
   
   if ((List.length props_not_k_ind) <> 0 && (Numeral.gt ind_k !bmcK) ) then
@@ -402,7 +419,7 @@ let rec produce_invariants bmc_solver ind_solver ts ind_k invariants start =
         bmc_solver 
         ts 
         (Numeral.succ !bmcK) 
-        (list_subtract (mk_candidate_invariants ()) invariants)
+        (list_difference (mk_candidate_invariants ()) invariants)
     );
     
   produce_invariants bmc_solver ind_solver ts  (Numeral.succ ind_k) (invariants@props_k_ind) false
