@@ -447,10 +447,43 @@ let inv_gen trans_sys =
     Bmc.S.new_solver ~produce_assignments:true logic 
   in
   
+  (* Declare uninterpreted function symbols *)
+  TransSys.iter_state_var_declarations
+    trans_sys
+    (Bmc.S.declare_fun bmc_solver);
+  
+  (* Define functions *)
+  TransSys.iter_uf_definitions
+    trans_sys
+    (Bmc.S.define_fun bmc_solver);
+
+  (* Assert initial state constraint *)
+  Bmc.S.assert_term bmc_solver (TransSys.init_of_bound trans_sys Numeral.zero);
+  
   (* Create IND solver instance *)
   let ind_solver = 
     IndStep.S.new_solver ~produce_assignments:true logic 
   in
+  
+  (* Declare uninterpreted function symbols *)
+  TransSys.iter_state_var_declarations
+    trans_sys
+    (IndStep.S.declare_fun ind_solver);
+
+  (* Define functions *)
+  TransSys.iter_uf_definitions
+    trans_sys
+    (IndStep.S.define_fun ind_solver);
+
+  (* Assert invariants C[x_0] 
+
+     Asserted before push, will be preserved after restart *)
+  IndStep.S.assert_term
+    ind_solver
+    (TransSys.invars_of_bound trans_sys Numeral.zero);
+
+  (* New context for assertions to be removed on restart *)
+  IndStep.S.push ind_solver;
     
   if (List.length bool_terms) <> 0 then
     
