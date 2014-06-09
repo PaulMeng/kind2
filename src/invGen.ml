@@ -17,26 +17,17 @@
 *)
 
 open Lib
-open Bmc
-
-
-(* Use configured SMT solver *)
-module BMCSolver = SMTSolver.Make (Config.SMTSolver)
-
-
-(* High-level methods for BMC solver *)
-module S = SolverMethods.Make (BMCSolver)
 
 (* Seconds before sending the next invariant *)
 let period = 0.5
 
 
 (* Current step in BMC *)
-let bmcK = ref 0
+let bmcK = ref Numeral.zero
 
 
 (* Current step in IND *)
-let indK = ref 0
+let indK = ref Numeral.zero
 
 (* We don't need to clean up anything *)
 let on_exit () = ()
@@ -293,7 +284,7 @@ let rebuild_graph uf_defs model k =
           List.partition
             (fun t ->
               Eval.bool_of_value
-                (Eval.eval_term uf_defs model (Term.bump_state (Numeral.of_int k) t))
+                (Eval.eval_term uf_defs model (Term.bump_state k t))
             )
           term_list
         in
@@ -322,6 +313,8 @@ let rebuild_graph uf_defs model k =
 
 (* Make candidate invariants out of the graph*)
 let mk_candidate_invariants () = 
+  
+  (*Make candidate invariants out of nodes*)
   let candidate_invariants =
     THT.fold
       (fun rep term_list accum ->
@@ -331,6 +324,8 @@ let mk_candidate_invariants () =
         (List.tl term_list))@accum)
     nodes_hashtl []
   in
+  
+  (*Make candidate invariants out of edges*)
   let candidate_invariants' =
     THT.fold
       (fun source destination_list accum ->
@@ -340,43 +335,79 @@ let mk_candidate_invariants () =
         destination_list)@accum)
     outgoing_hashtl []
   in
+  
   (candidate_invariants@candidate_invariants')
-(*
+
 (*Call BMC to create stable implication graph*)
 let rec create_stable_graph solver ts k candidate_invs =
   
-  (* Call BMC until no properties disproved *)
-  let p_invalid, model = 
-    BMC.step solver ts k candidate_invs
+  (* Call BMC until no properties disproved at current step*)
+  let props_unknown, props_invalid = 
+    
+    Bmc.bmc_step true solver ts k candidate_invs
+    
   in
   
-  (* Record the current step in bmc*)
-  bmcK := k;
+  (*Record current bmc step*)
+  bmcK := Numeral.succ k;
   
   (*rebuild the graph if some candidate invariants are disproved by BMC*)
-  if List.length p_invalid <> 0 then
-    rebuild_graph ts.TransSys.uf_defs model k;    
-    create_stable_graph solver ts k (mk_candidate_invariants ())
-
-let rec produce_invariants = 
-  let p_to_check, p_falsified, p_assumed, reset = 
-    IND.step solver ts preK k propertiesToCheck propertiesToCheckNextK assumedProperties
-  in
-
-*)
-let generate_invariants candidate_invs =
-  create_stable_graph solver ts k candidate_invs
+  if List.length props_invalid <> 0 then
+    
+    let uf_defs = trans_sys.TransSys.uf_defs in
   
+    (* Variables in property at step k *)
+    let k_vars = Var.VarSet.elements (Term.vars_of_term p_k) in
+  
+    (* Model for variables of property at step k *)
+    let k_model = S.get_model solver k_vars in
+    
+    rebuild_graph uf_defs k_model k;
+        
+    create_stable_graph solver ts (Numeral.succ k) (mk_candidate_invariants ())
 
-
-(** Build implication graph*)
-let generate_candidate_invariants uf_defs model k =
-  rebuild_graph uf_defs model k;
-  mk_candidate_invariants ()
+let rec produce_invariants bmc_solver ind_solver ts ind_k invariants start = 
+  
+  if start then
+    
+    (*Create a stable implication graph by BMC*)
+    create_stable_graph bmc_solver ts Numeral.zero (mk_candidate_invariants ());
+  
+  let props_k_ind, props_not_k_ind = 
+    
+    IndStep.ind_step 
+      ind_solver 
+      ts 
+      [] 
+      (list_subtract (mk_candidate_invariants ()) invariants)
+      ind_k
+    
+  in
+  
+  (*Send out invariants props_k_ind*)
+  List.iter
+    (fun (name, term) -> Event.invariant `INVGEN term) 
+  props_k_ind;
+  
+  if ((List.length props_not_k_ind) <> 0 && (Numeral.gt ind_k bmcK) ) then
+    
+    ( 
+      create_stable_graph 
+        bmc_solver 
+        ts 
+        (Numeral.succ bmcK) 
+        (list_subtract (mk_candidate_invariants ()) invariants)
+    );
+    
+  produce_invariants bmc_solver ind_solver ts  (Numeral.succ ind_k) (invariants@props_k_ind) false
+  
 
 (* Generate invariants from candidate terms*)
 let inv_gen trans_sys = 
+  
+  (*Extract candidate terms from transition system*)
   let candidate_terms = extract_terms trans_sys in
+  
   let bool_terms =
     List.fold_left
       (fun accum (symbol,l) ->
@@ -384,17 +415,39 @@ let inv_gen trans_sys =
       )
     [] candidate_terms
   in
-  if (List.length bool_terms) = 0 then
-    ()
-  else
-    THT.add nodes_hashtl Term.t_true (Term.t_true::Term.t_false::bool_terms);
-    let uf_defs = trans_sys.TransSys.uf_defs in
-    let candidate_invariants = mk_candidate_invariants () in
-    List.iter
-    (fun t ->
-      (debug inv "Candidate invariant:  %s" (Term.string_of_term t) end);
-    ) 
-    candidate_invariants
+  
+  (* Determine logic for the SMT solver *)
+  let logic = TransSys.get_logic trans_sys in
+  
+  (* Create BMC solver instance *)
+  let bmc_solver = 
+    Bmc.S.new_solver ~produce_assignments:true logic 
+  in
+  
+  (* Create IND solver instance *)
+  let ind_solver = 
+    IndStep.S.new_solver ~produce_assignments:true logic 
+  in
+    
+  if (List.length bool_terms) <> 0 then
+    
+    (
+      
+      THT.add nodes_hashtl Term.t_true (Term.t_true::Term.t_false::bool_terms);
+      
+      produce_invariants bmc_solver ind_solver trans_sys Numeral.zero [] true
+      
+    )
+      
+      
+(*      let candidate_invariants = mk_candidate_invariants () in
+      
+      List.iter
+      (fun t ->
+        (debug inv "Candidate invariant:  %s" (Term.string_of_term t) end);
+      ) 
+      candidate_invariants
+    )*)
 
 (*    List.iter
     (fun (s, t) ->

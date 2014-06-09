@@ -278,6 +278,22 @@ let ind_compress_default = true
 
 (* ********** *) 
 
+type invgen_mode_invariant = bool
+    
+let string_of_invgen_mode_invariant = string_of_bool
+
+let invgen_mode_invariant_default = false
+
+(* ********** *) 
+
+type invgen_bool_complement = bool
+    
+let string_of_invgen_bool_complement = string_of_bool
+
+let invgen_bool_complement_default = false
+
+(* ********** *) 
+
 type pdr_check_inductive = bool
     
 let string_of_pdr_check_inductive = string_of_bool
@@ -475,6 +491,8 @@ type flags =
       mutable ind_compress : ind_compress;
       mutable pdr_qe : pdr_qe;
       mutable pdr_extract : pdr_extract;
+      mutable invgen_mode_invariant : invgen_mode_invariant;
+      mutable invgen_bool_complement : invgen_bool_complement;
       mutable pdr_check_inductive : pdr_check_inductive;
       mutable pdr_fwd_prop_check_multi : pdr_fwd_prop_check_multi;
       mutable pdr_print_inductive_assertions : pdr_print_inductive_assertions;
@@ -508,6 +526,8 @@ let flags =
     enable = enable_default_init;
     bmc_max = bmc_max_default;
     ind_compress = ind_compress_default;
+    invgen_mode_invariant = invgen_mode_invariant_default;
+    invgen_bool_complement = invgen_bool_complement_default;
     pdr_qe = pdr_qe_default;
     pdr_extract = pdr_extract_default;
     pdr_check_inductive = pdr_check_inductive_default;
@@ -638,6 +658,24 @@ let pdr_extract_spec =
   ("--pdr_extract", 
    Arg.String pdr_extract_action, 
    Format.sprintf "(PDR) Heuristics for extraction of implicant (available: %s, default: %s)" pdr_extract_values (string_of_pdr_extract pdr_extract_default))
+
+(* ********** *) 
+
+let invgen_mode_invariant_action o = flags.invgen_mode_invariant <- o
+  
+let invgen_mode_invariant_spec = 
+  ("--invgen_mode_invariant", 
+   Arg.Bool invgen_mode_invariant_action, 
+   Format.sprintf "(INVGEN) generate mode variable equations as candidate terms (default: %s)" (string_of_invgen_mode_invariant invgen_mode_invariant_default))
+
+(* ********** *) 
+
+let invgen_bool_complement_action o = flags.invgen_bool_complement <- o
+  
+let invgen_bool_complement_spec = 
+  ("--invgen_bool_complement", 
+   Arg.Bool invgen_mode_invariant_action, 
+   Format.sprintf "(INVGEN) generate complement of boolean terms as candidate terms (default: %s)" (string_of_invgen_bool_complement invgen_bool_complement_default))
 
 (* ********** *) 
 
@@ -868,6 +906,10 @@ let bmc_max () = flags.bmc_max
 
 let ind_compress () = flags.ind_compress 
 
+let invgen_mode_invariant () = flags.invgen_mode_invariant 
+
+let invgen_bool_complement () = flags.invgen_bool_complement 
+
 let pdr_qe () = flags.pdr_qe 
 
 let pdr_extract () = flags.pdr_extract 
@@ -958,6 +1000,12 @@ and speclist =
 
     (* Compress inductive counterexamples *)
     ind_compress_spec;
+    
+    (* Generate mode variable equations as candidate terms *)
+    invgen_mode_invariant_spec;
+    
+    (* Generate the complement of boolean variables as candidate terms*)
+    invgen_bool_complement_spec;
 
     (* Set QE in PDR *)
     pdr_qe_spec;
