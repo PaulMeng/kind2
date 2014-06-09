@@ -471,7 +471,6 @@ let inv_gen trans_sys =
       ) 
       candidate_invariants
     )*)
-
 (*    List.iter
     (fun (s, t) ->
       (debug inv "Extract symbol s = %s" (UfSymbol.string_of_uf_symbol s) end);
