@@ -107,62 +107,21 @@ struct
   (* Create a new instance of an SMT solver, declare all currently
      created uninterpreted function symbols *)
   let new_solver 
-      ?(produce_assignments = false)
-      ?(produce_models = false) 
-      ?(produce_proofs = false) 
-      ?(produce_cores = false)
+      ?produce_assignments
+      ?produce_models
+      ?produce_proofs
+      ?produce_cores
       logic =
 
     (* Create solver instance *)
     let solver =     
       S.create_instance 
-        ~produce_assignments
-        ~produce_models
-        ~produce_proofs
-        ~produce_cores
+        ?produce_assignments
+        ?produce_models
+        ?produce_proofs
+        ?produce_cores
         logic
     in
-
-(*
-
-    (
-
-      match 
-
-        (* Declare uninterpreted function symbols *)
-        SMTExpr.declare_smt_symbols (S.declare_fun solver)
-
-      with
-
-        | SMTExpr.NoResponse -> 
-          (Event.log 
-             0 
-             ("Error: Could not initialize SMT Solver." ^^ 
-                 "No response when declaring uninterpreted symbols"))
-
-        | SMTExpr.Unsupported -> 
-          (Event.log 
-             0 
-             ("Error: Could not initialize SMT Solver." ^^ 
-                 "Solve replied unsupported when declaring uninterpreted symbols"))
-
-        | SMTExpr.Error e -> 
-          (Event.log 
-             0 
-             ("Error: Could not initialize SMT Solver." ^^ 
-                 "%s when declaring uninterpreted symbols")
-             e)
-
-        | SMTExpr.Success -> ()
-
-    );
-*)
-
-(*
-    (* Declare uninterpreted function symbols *)
-    fail_on_smt_error 
-      (SMTExpr.declare_smt_symbols (S.declare_fun solver));
-*)
 
     (* Return solver instance *)
     solver

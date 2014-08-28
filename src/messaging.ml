@@ -27,39 +27,11 @@ open Printf
 (*  Types                     *)
 (******************************)
 
-exception No_value
-(* exception Terminate *)
 exception SocketConnectFailure
 exception SocketBindFailure
 exception BadMessage
 exception InvalidProcessName  
 exception NotInitialized
-
-
-
-(*
-type invariant = 
-  | INVAR of string * int
-
-  | PROP_KTRUE of string * int * int
-  | PROP_INVAR of string * int 
-  | PROP_FALSE of string * int
-  | PROP_KFALSE of string * int * int
-
-  | PROVED of string * int * int
-  | DISPROVED of string * int * int
-
-  | RESEND of int
-
-
-type induction = 
-  | BMCSTATE  of int * (string list)
-
-
-type counterexample = 
-  | COUNTEREXAMPLE of int
-
-*)
 
 
 (* Return true if the process is the invariant manages *)
@@ -68,6 +40,7 @@ let is_invariant_manager = function
   | _ -> false
 
 
+(* Pretty-print ZMQ message frames *)
 let rec pp_print_zmsg_frames n ppf zmsg =
 
   if n <= 0 then () else
@@ -76,9 +49,10 @@ let rec pp_print_zmsg_frames n ppf zmsg =
      if n > 1 then Format.fprintf ppf ";@ ";
      pp_print_zmsg_frames (pred n) ppf zmsg)
 
-
+(* Pretty-print a ZMQ message *)
 let pp_print_zmsg ppf zmsg = 
   
+  (* Copy message and print all frames *)
   Format.fprintf 
     ppf
     "@[<hv 1>{%a}@]"
@@ -106,6 +80,7 @@ sig
 end
 
 
+(* Output signature of functor *)
 module type S =
 sig
 
@@ -151,6 +126,7 @@ sig
   val exit : thread -> unit 
 
 end
+
 
 (* Functor to instantiate the messaging system with a type of messages *)
 module Make (T: RelayMessage) : S with type relay_message = T.t =
@@ -379,6 +355,7 @@ struct
         
   type 'a locking_queue = { lock : Mutex.t ; mutable q : 'a list }
 
+
   let new_locking_queue () =
     { lock = Mutex.create (); q = [] }
     
@@ -422,10 +399,9 @@ struct
     entry
     
   
-  let remove_list queue = 
+  (* Return all elements in queue in order, and empty the queue *)
+  let empty_list queue = 
     
-    (* returns the contents of the queue as a list, empties the
-       queue *)
     Mutex.lock queue.lock;
     
     let res = queue.q in
@@ -437,25 +413,23 @@ struct
     res
     
   (* ******************************************************************** *)
-  (*  Utilites                                                            *)
-  (* ******************************************************************** *)
-
-  let get = function
-    | Some x -> x
-    | None -> raise No_value
-
-  
-  (* ******************************************************************** *)
   (*  Globals                                                             *)
   (* ******************************************************************** *)
 
-  (* Fresh incoming messages *)
+  (* Fresh incoming messages
+
+     Keep messages in the order received, first message at the head of
+     the list *)
   let incoming = new_locking_queue ()
 
-  (* Messages to be sent *)
+  (* Messages to be sent
+
+     Keep messages in the order received *)
   let outgoing = new_locking_queue ()
 
-  (* Messages to be delivered to worker process *)
+  (* Messages to be delivered to worker process
+
+     Keep messages in the order received *)
   let incoming_handled = new_locking_queue ()
 
   (* messages to receive iteration of the background thread loop *)
@@ -484,72 +458,70 @@ struct
 
   let im_handle_messages workers worker_status invariant_id invariants = 
 
-    let rec handle_all incoming =
+    let rec handle_all = function
 
-      match incoming with
+      | msg :: t ->  
 
-        | msg :: t ->  
+        (* *)
+        let sender, payload = msg in
 
-          (* *)
-          let sender, payload = msg in
+        debug messaging
+            "Invariant manager received message %a from %d"
+            pp_print_message payload 
+            sender
+        in
 
-          debug messaging
-              "Invariant manager received message %a from %d"
-              pp_print_message payload 
-              sender
-          in
+        (match payload with 
 
-          (match payload with 
+          | OutputMessage m -> 
 
-            | OutputMessage m -> 
+            enqueue 
+              ((List.assoc sender workers), payload) 
+              incoming_handled
 
-              enqueue 
-                ((List.assoc sender workers), payload) 
-                incoming_handled
+          | ControlMessage m -> 
 
-            | ControlMessage m -> 
+            (match m with
+              | Ready -> ()
+              | Ping -> enqueue (ControlMessage(Ready)) outgoing
+              | Terminate -> enqueue (ControlMessage(Terminate)) outgoing
 
-              (match m with
-                | Ready -> ()
-                | Ping -> enqueue (ControlMessage(Ready)) outgoing
-                | Terminate -> enqueue (ControlMessage(Terminate)) outgoing
+              | Resend n -> 
 
-                | Resend n -> 
+                try 
+                  enqueue (Hashtbl.find invariants n) outgoing
+                with 
+                  | Not_found -> ()
 
-                  try 
-                    enqueue (Hashtbl.find invariants n) outgoing
-                  with 
-                    | Not_found -> ()
+            )
 
-              )
+          | RelayMessage (_, m) -> 
 
-            | RelayMessage (_, m) -> 
+            let identified_msg = 
+              RelayMessage (!invariant_id, m)
+            in
 
-              let identified_msg = 
-                RelayMessage (!invariant_id, m)
-              in
-              
-              Hashtbl.add invariants !invariant_id identified_msg;
+            Hashtbl.add invariants !invariant_id identified_msg;
 
-              enqueue identified_msg outgoing;
+            enqueue identified_msg outgoing;
 
-              invariant_id := !invariant_id + 1;
+            invariant_id := !invariant_id + 1;
 
-              enqueue
-                ((List.assoc sender workers), payload) 
-                incoming_handled);
-          
-          (* update the status of the sender *)
-          Hashtbl.replace worker_status sender (Unix.time ());
-          
-          handle_all t;
-          
-        | []  -> ()
-                 
+            enqueue
+              ((List.assoc sender workers), payload) 
+              incoming_handled);
+
+        (* update the status of the sender *)
+        Hashtbl.replace worker_status sender (Unix.time ());
+
+        handle_all t;
+
+      | []  -> ()
+
     in
-    
-    let msgs = (remove_list incoming) in
-    
+
+    let msgs = (empty_list incoming) in
+
     handle_all msgs
       
   
@@ -593,120 +565,118 @@ struct
 
     (* it might be worth looking into efficiency of dealing with
        unconfirmed invariant list *)
-    let rec handle_all incoming =
+    let rec handle_all = function
 
-      match incoming with
+      | msg :: t ->  
 
-        | msg :: t ->  
+        let sender, payload = msg in
 
-          let sender, payload = msg in
+        debug messaging
+            "Worker received message %a from %d"
+            pp_print_message payload 
+            sender
+        in
 
-          debug messaging
-              "Worker received message %a from %d"
-              pp_print_message payload 
-              sender
-          in
+        (match payload with 
 
-          (match payload with 
+          | OutputMessage _ -> ()
 
-            | OutputMessage _ -> ()
+          | ControlMessage m  -> 
 
-            | ControlMessage m  -> 
+            (match m with
 
-              (match m with
+              | Ready -> ()
 
-                | Ready -> ()
+              | Ping -> enqueue (ControlMessage Ready) outgoing
 
-                | Ping -> enqueue (ControlMessage Ready) outgoing
+              | Terminate -> 
 
-                | Terminate -> 
+                enqueue
+                  (`INVMAN, payload) 
+                  incoming_handled
 
-                  enqueue
-                    (`INVMAN, payload) 
-                    incoming_handled
+              (* Workers do not resend messages *)
+              | Resend n -> ()
 
-                (* Workers do not resend messages *)
-                | Resend n -> ()
+            )
+
+
+          | RelayMessage (i, m) ->
+
+            (* Remove sequence number from message *)
+            let payload' = RelayMessage (0, m) in 
+
+            if 
+
+              (* Message is ours and had not been confirmed? *)
+              Hashtbl.mem 
+                unconfirmed_invariants 
+                payload'
+
+            then 
+
+              (
+
+                (* Message is no longer unconfirmed *)
+                Hashtbl.remove 
+                  unconfirmed_invariants 
+                  payload';
+
+                (* Message is confirmed *)
+                Hashtbl.add confirmed_invariants i msg
+
+              ) 
+
+            else 
+
+              (
+
+                (* Skip if message has received before *)
+                if Hashtbl.mem confirmed_invariants i then () else 
+
+                  (
+
+                    (* Accept message *)
+                    enqueue 
+                      (`INVMAN, payload) 
+                      incoming_handled;
+
+                    (* Store message *)
+                    Hashtbl.add confirmed_invariants i msg;
+
+                    if 
+
+                      (* Gap in sequence detected? *)
+                      i > ((!last_received_invariant_id) + 1) 
+
+                    then 
+
+                      (
+
+                        (* we've missed at least one invariant,
+                           request any not received *)
+                        worker_request_missing_invariants 
+                          last_received_invariant_id 
+                          i
+
+                      );
+
+                    (* Keep sequence for next iteration *)
+                    last_received_invariant_id := i
+
+                  )
 
               )
 
+        );
 
-            | RelayMessage (i, m) ->
+        handle_all t;
 
-              (* Remove sequence number from message *)
-              let payload' = RelayMessage (0, m) in 
-
-              if 
-
-                (* Message is ours and had not been confirmed? *)
-                Hashtbl.mem 
-                  unconfirmed_invariants 
-                  payload'
-
-              then 
-
-                (
-
-                  (* Message is no longer unconfirmed *)
-                  Hashtbl.remove 
-                    unconfirmed_invariants 
-                    payload';
-
-                  (* Message is confirmed *)
-                  Hashtbl.add confirmed_invariants i msg
-
-                ) 
-
-              else 
-
-                (
-
-                  (* Skip if message has received before *)
-                  if Hashtbl.mem confirmed_invariants i then () else 
-
-                    (
-
-                      (* Accept message *)
-                      enqueue 
-                        (`INVMAN, payload) 
-                        incoming_handled;
-
-                      (* Store message *)
-                      Hashtbl.add confirmed_invariants i msg;
-
-                      if 
-
-                        (* Gap in sequence detected? *)
-                        i > ((!last_received_invariant_id) + 1) 
-
-                      then 
-
-                        (
-
-                          (* we've missed at least one invariant,
-                             request any not received *)
-                          worker_request_missing_invariants 
-                            last_received_invariant_id 
-                            i
-
-                        );
-
-                      (* Keep sequence for next iteration *)
-                      last_received_invariant_id := i
-
-                    )
-
-                )
-
-          );
-
-          handle_all t;
-
-        | [] -> ()
+      | [] -> ()
 
     in 
 
-    handle_all (remove_list incoming)
+    handle_all (empty_list incoming)
 
 
   let recv_messages sock as_invariant_manager = 
@@ -761,6 +731,10 @@ struct
           let zm = zmsg_of_msg message in
           let rc = zmsg_send (zm) sock in
 
+          (* Retry sending on failure
+
+             We are sending [message_burst_size] messages, this will
+             terminate *)
           if (rc < 0) then push_front message outgoing; 
 
           send_iter (i+1) (dequeue outgoing)
@@ -798,6 +772,10 @@ struct
             zmsg_send (zmsg_of_msg message) sock 
           in
 
+          (* Retry sending on failure
+
+             We are sending [message_burst_size] messages, this will
+             terminate *)
           if (rc < 0) then push_front message outgoing else 
 
             (
@@ -1287,7 +1265,7 @@ struct
   let recv () = 
 
     if !initialized_process = None then raise NotInitialized else
-      List.rev (remove_list incoming_handled)
+      (empty_list incoming_handled)
 
 
   let exit t = 

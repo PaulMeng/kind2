@@ -16,13 +16,17 @@
 
 *)
 
-(** Output of terms in Lustre syntax 
+(** Dummy invariant generator
+
+    Periodically sends a tautological invariant.
 
     @author Christoph Sticksel *)
 
-val pp_print_term : Format.formatter -> Term.t -> unit
+(** Entry point *)
+val main : TransSys.t -> unit
 
-val print_term : Term.t -> unit
+(** Cleanup before exit *)
+val on_exit : TransSys.t option -> unit
 
 (* 
    Local Variables:
@@ -31,8 +35,4 @@ val print_term : Term.t -> unit
    indent-tabs-mode: nil
    End: 
 *)
-
-
-      
-
-
+  
