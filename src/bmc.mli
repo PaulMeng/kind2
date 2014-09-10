@@ -39,6 +39,10 @@ module S : SolverMethods.S
 *)
 val bmc_step : bool -> S.t -> TransSys.t -> Numeral.t -> (string * Term.t) list -> (string * Term.t) list * ((StateVar.t * Term.t list) list * (string * Term.t) list) list
 
+
+(***)
+val bmc_invgen_step : bool -> S.t -> TransSys.t -> Numeral.t -> (string * Term.t) list -> (string * Term.t) list * ((StateVar.t * Term.t list) list * (string * Term.t) list) list * (Var.t * Term.t) list
+
 (** Entry point *)
 val main : TransSys.t -> unit
 
