@@ -315,6 +315,23 @@ let string_of_invgen_bool_complement = string_of_bool
 
 let invgen_bool_complement_default = false
 
+type ind_compress_equal = bool
+    
+let ind_compress_equal_default = true
+
+(* ********** *) 
+
+type ind_compress_same_succ = bool
+    
+let ind_compress_same_succ_default = true
+
+(* ********** *) 
+
+type ind_compress_same_pred = bool
+    
+let ind_compress_same_pred_default = true
+
+
 (* ********** *) 
 
 type ind_print_inductive_cex = bool
@@ -523,6 +540,9 @@ type flags =
       mutable check_version : check_version;
       mutable bmc_max : bmc_max;
       mutable ind_compress : ind_compress;
+      mutable ind_compress_equal : ind_compress_equal;
+      mutable ind_compress_same_succ : ind_compress_same_succ;
+      mutable ind_compress_same_pred : ind_compress_same_pred;
       mutable ind_print_inductive_cex : ind_print_inductive_cex;
       mutable pdr_qe : pdr_qe;
       mutable pdr_extract : pdr_extract;
@@ -567,6 +587,9 @@ let flags =
     ind_compress = ind_compress_default;
     invgen_mode_invariant = invgen_mode_invariant_default;
     invgen_bool_complement = invgen_bool_complement_default;
+    ind_compress_equal = ind_compress_equal_default;
+    ind_compress_same_succ = ind_compress_same_succ_default;
+    ind_compress_same_pred = ind_compress_same_pred_default;
     ind_print_inductive_cex = ind_print_inductive_cex_default;
     pdr_qe = pdr_qe_default;
     pdr_extract = pdr_extract_default;
@@ -720,6 +743,33 @@ let ind_compress_spec =
   ("--ind_compress", 
    Arg.Bool ind_compress_action, 
    Format.sprintf "(IND) Compress inductive counterexamples (default: %B)" ind_compress_default)
+
+(* ********** *) 
+
+let ind_compress_equal_action o = flags.ind_compress_equal <- o
+  
+let ind_compress_equal_spec = 
+  ("--ind_compress_equal", 
+   Arg.Bool ind_compress_equal_action, 
+   Format.sprintf "(IND) Compress inductive counterexamples for states equal modulo inputs (default: %B)" ind_compress_equal_default)
+
+(* ********** *) 
+
+let ind_compress_same_succ_action o = flags.ind_compress_same_succ <- o
+  
+let ind_compress_same_succ_spec = 
+  ("--ind_compress_same_succ", 
+   Arg.Bool ind_compress_same_succ_action, 
+   Format.sprintf "(IND) Compress inductive counterexamples for states with same successors (default: %B)" ind_compress_same_succ_default)
+
+(* ********** *) 
+
+let ind_compress_same_pred_action o = flags.ind_compress_same_pred <- o
+  
+let ind_compress_same_pred_spec = 
+  ("--ind_compress_same_pred", 
+   Arg.Bool ind_compress_same_pred_action, 
+   Format.sprintf "(IND) Compress inductive counterexamples for states with same predecessors (default: %B)" ind_compress_same_pred_default)
 
 (* ********** *) 
 
@@ -1003,6 +1053,12 @@ let bmc_max () = flags.bmc_max
 
 let ind_compress () = flags.ind_compress 
 
+let ind_compress_equal () = flags.ind_compress_equal 
+
+let ind_compress_same_succ () = flags.ind_compress_same_succ 
+
+let ind_compress_same_pred () = flags.ind_compress_same_pred 
+
 let ind_print_inductive_cex () = flags.ind_print_inductive_cex 
 
 let invgen_mode_invariant () = flags.invgen_mode_invariant 
@@ -1010,6 +1066,8 @@ let invgen_mode_invariant () = flags.invgen_mode_invariant
 let invgen_bool_complement () = flags.invgen_bool_complement 
 
 let pdr_qe () = flags.pdr_qe 
+
+let set_pdr_qe f = flags.pdr_qe <- f
 
 let pdr_extract () = flags.pdr_extract 
 
@@ -1117,6 +1175,16 @@ and speclist =
     
     (* Generate the complement of boolean variables as candidate terms*)
     invgen_bool_complement_spec;
+
+    (* Compress inductive counterexamples when states are equal modulo
+       input *)
+    ind_compress_equal_spec;
+
+    (* Compress inductive counterexamples when states have same successors *)
+    ind_compress_same_succ_spec;
+
+    (* Compress inductive counterexamples when states have same predecessors *)
+    ind_compress_same_pred_spec;
 
     (* Compress inductive counterexamples *)
     ind_print_inductive_cex_spec;

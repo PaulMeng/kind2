@@ -127,6 +127,9 @@ val list_subset_uniq :  ('a -> 'a -> int) -> 'a list -> 'a list -> bool
     at each element are equal. *)
 val list_join : ('a -> 'a -> bool) -> ('a * 'b) list -> ('a * 'b list) list -> ('a * 'b list) list
 
+(** Lexicographic comparison of pairs *)
+val compare_pairs : ('a -> 'a -> int) -> ('b -> 'b -> int) -> 'a * 'b -> 'a * 'b -> int 
+
 (** Lexicographic comparison of lists *)
 val compare_lists : ('a -> 'a -> int) -> 'a list -> 'a list -> int 
 
@@ -168,9 +171,11 @@ val pp_print_list : (Format.formatter -> 'a -> unit) -> ('b, Format.formatter, u
 (** Pretty-print an option type *)
 val pp_print_option : (Format.formatter -> 'a -> unit) -> Format.formatter -> 'a option -> unit
 
+(** Output a horizonal dasehd line *)
+val pp_print_hline : Format.formatter -> unit -> unit 
+
 (** Pretty-print into a string *)
 val string_of_t : (Format.formatter -> 'a -> unit) -> 'a -> string 
-
 
 (** Return the strings as a parenthesized and space separated list *)
 val paren_string_of_string_list : string list -> string

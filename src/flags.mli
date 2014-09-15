@@ -89,6 +89,19 @@ val check_version : unit -> check_version
 type ind_compress = bool
 val ind_compress : unit -> ind_compress
 
+(** Compresss inductive counterexample when states are equal modulo
+    inputs *)
+type ind_compress_equal = bool
+val ind_compress_equal : unit -> ind_compress_equal
+
+(** Compresss inductive counterexample when states have same successors *)
+type ind_compress_same_succ = bool
+val ind_compress_same_succ : unit -> ind_compress_same_succ
+
+(** Compresss inductive counterexample when states have same predecessors *)
+type ind_compress_same_pred = bool
+val ind_compress_same_pred : unit -> ind_compress_same_pred
+
 (** Output inductive counterexample *)
 type ind_print_inductive_cex = bool
 val ind_print_inductive_cex : unit -> ind_print_inductive_cex
@@ -104,6 +117,7 @@ val invgen_bool_complement : unit -> invgen_bool_complement
 (** Algorithm for quantifier elimination in PDR *)
 type pdr_qe = [ `Z3 | `Z3_impl | `Z3_impl2 | `Cooper ]
 val pdr_qe : unit -> pdr_qe
+val set_pdr_qe : pdr_qe -> unit
 
 (** Heuristics for extraction of implicant *)
 type pdr_extract = [ `First | `Vars ]

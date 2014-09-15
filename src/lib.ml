@@ -291,6 +291,11 @@ let rec list_subset_uniq cmp l1 l2 = match l1, l2 with
   | h1 :: _, h2 :: tl -> list_subset_uniq cmp l1 tl
 
 
+(* Lexicographic comparison of pairs *)
+let compare_pairs cmp_a cmp_b (a1, b1) (a2, b2) =
+  let c_a = cmp_a a1 a2 in if c_a = 0 then cmp_b b1 b2 else c_a
+
+
 (* Lexicographic comparison of lists *)
 let rec compare_lists f l1 l2 = 
 
@@ -436,6 +441,18 @@ let string_of_t pp t =
 let paren_string_of_string_list list =
   string_of_t pp_print_paren_list list
 
+
+(* Output a horizonal dasehd line *)
+let pp_print_hline ppf () = 
+  
+  let width = Format.pp_get_margin ppf () in 
+
+  let hline = String.make width '-' in
+
+  Format.fprintf 
+    ppf 
+    "%s"
+    hline
 
 
 (* ********************************************************************** *)
@@ -872,7 +889,7 @@ let log_to_stdout () = log_ppf := Format.std_formatter
 (* ********************************************************************** *)
 
 let pp_print_banner ppf () =
-    Format.fprintf ppf "%s %s" Config.package_name Version.version
+    Format.fprintf ppf "%s %s" Kind2Config.package_name Version.version
 
 let pp_print_version ppf = pp_print_banner ppf ()
   

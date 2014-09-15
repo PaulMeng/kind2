@@ -39,12 +39,22 @@ type prop_status =
   | PropFalse of (StateVar.t * Term.t list) list
 
 
+(* Return the length of the counterexample *)
+let length_of_cex = function 
+
+  (* Empty counterexample has length zero *)
+  | [] -> 0
+
+  (* Length of counterexample from first state variable *)
+  | (_, l) :: _ -> List.length l
+
+
 let pp_print_prop_status_pt ppf = function 
   | PropUnknown -> Format.fprintf ppf "unknown"
   | PropKTrue k -> Format.fprintf ppf "true-for %d" k
   | PropInvariant -> Format.fprintf ppf "invariant"
   | PropFalse [] -> Format.fprintf ppf "false"
-  | PropFalse ((_, c) :: _) -> Format.fprintf ppf "false-at %d" (List.length c)
+  | PropFalse cex -> Format.fprintf ppf "false-at %d" (length_of_cex cex)
 
 
 (* Property status is known? *)
@@ -304,6 +314,13 @@ let add_invariant t invar = t.invars <- invar :: t.invars
 (* Return current status of all properties *)
 let prop_status_all trans_sys = trans_sys.prop_status
 
+(* Return current status of all properties *)
+let prop_status_all_unknown trans_sys = 
+
+  List.filter
+    (fun (_, s) -> not (prop_status_known s))
+    trans_sys.prop_status
+
 
 (* Return current status of property *)
 let prop_status trans_sys p = 
@@ -360,14 +377,14 @@ let prop_false t prop cex =
               raise (Failure "prop_false")
 
             (* Fail if property was l-true for l >= k *)
-            | PropKTrue l when l >= (List.length cex) -> 
+            | PropKTrue l when l > (length_of_cex cex) -> 
               raise (Failure "prop_false")
 
             (* Mark property as false if it was l-true for l < k *)
             | PropKTrue _ -> (n, PropFalse cex)
 
             (* Keep if property was l-false for l <= k *)
-            | PropFalse cex' when (List.length cex') <= (List.length cex) -> 
+            | PropFalse cex' when (length_of_cex cex') <= (length_of_cex cex) -> 
               (n, s)
 
             (* Mark property as k-false *)
@@ -402,7 +419,7 @@ let prop_ktrue t k prop =
             | PropInvariant -> (n, s)
 
             (* Keep if property was l-false for l > k *)
-            | PropFalse cex when (List.length cex) > k -> (n, s)
+            | PropFalse cex when (length_of_cex cex) > k -> (n, s)
 
             (* Fail if property was l-false for l <= k *)
             | PropFalse _ -> 
@@ -458,12 +475,35 @@ let all_props_proved trans_sys =
 let uf_symbols_of_trans_sys { state_vars } = 
   List.map StateVar.uf_symbol_of_state_var state_vars
 
+
+(* Return uninterpreted function symbol definitions *)
 let uf_defs { pred_defs } = 
 
   List.fold_left 
     (fun a (i, t) -> i :: t :: a)
     []
     pred_defs
+
+(* Return uninterpreted function symbol definitions as pairs of
+    initial state and transition relation definitions *)
+let uf_defs_pairs { pred_defs } = pred_defs
+
+
+(* Return [true] if the uninterpreted symbol is a transition relation *)
+let is_trans_uf_def trans_sys uf_symbol = 
+
+  List.exists
+    (function (_, (t, _)) -> UfSymbol.equal_uf_symbols uf_symbol t)
+    trans_sys.pred_defs
+ 
+
+(* Return [true] if the uninterpreted symbol is an initial state constraint *)
+let is_init_uf_def trans_sys uf_symbol = 
+
+  List.exists
+    (function ((i, _), _) -> UfSymbol.equal_uf_symbols uf_symbol i)
+    trans_sys.pred_defs
+ 
 
 (* Apply [f] to all uninterpreted function symbols of the transition
    system *)
@@ -527,6 +567,57 @@ let path_from_model trans_sys get_model k =
     (state_vars trans_sys)
     k
 
+
+(* Return true if the value of the term in some instant satisfies [pred] *)
+let rec exists_eval_on_path' uf_defs pred term k model path =
+
+  try 
+
+    (* Extend model, shrink path *)
+    let model', path' = 
+      List.fold_left 
+        (function (model, path) -> function 
+
+           (* No more values for one state variable *)
+           | (_, []) -> raise Exit
+
+           (* Take the first value for state variable *)
+           | (sv, h :: tl) -> 
+
+             let v = Var.mk_state_var_instance sv k in
+
+             (* Add pair of state variable and value to model, continue
+                with remaining value for variable on path *)
+             ((v, h) :: model, (sv, tl) :: path)
+
+        )
+        (model, path)
+        path
+    in
+    
+    (* Evaluate term in model *)
+    let term_eval = Eval.eval_term uf_defs model' term in
+    
+    (* Return ture if predicate holds *)
+    if pred term_eval then true else
+      
+      (* Increment offset of state variables in term *)
+      let term' = Term.bump_state Numeral.one term in
+
+      (* Increment instant *)
+      let k' = Numeral.succ k in
+
+      (* Continue checking predicate on path *)
+      exists_eval_on_path' uf_defs pred term' k' model' path'
+        
+  (* Predicate has never been true *)
+  with Exit -> false 
+
+
+(* Return true if the value of the term in some instant satisfies [pred] *)
+let exists_eval_on_path uf_defs pred term path = 
+  exists_eval_on_path' uf_defs pred term Numeral.zero [] path 
+  
 
 
 (* 

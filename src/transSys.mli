@@ -52,6 +52,9 @@ val pp_print_prop_status_pt : Format.formatter -> prop_status -> unit
     [PropInvariant], [PropFalse] and [PropKFalse].  *)
 val prop_status_known : prop_status -> bool
 
+(** Return the length of the counterexample *)
+val length_of_cex : (StateVar.t * Term.t list) list -> int
+
 (** The transition system 
 
     The transition system must be constructed with the function
@@ -98,6 +101,9 @@ type t = private
     constraint to the invariants. *)
 val mk_trans_sys : (pred_def * pred_def) list -> StateVar.t list -> Term.t -> Term.t -> (string * Term.t) list -> input -> t
 
+(** Pretty-print a predicate definition *)
+val pp_print_uf_def : Format.formatter -> pred_def -> unit
+
 (** Pretty-print a transition system *)
 val pp_print_trans_sys : Format.formatter -> t -> unit
 
@@ -134,13 +140,27 @@ val invars_of_bound : t -> Numeral.t -> Term.t
 (** Return uninterpreted function symbols to be declared in the SMT solver *)
 val uf_symbols_of_trans_sys : t -> UfSymbol.t list
 
+(** Return uninterpreted function symbol definitions *)
 val uf_defs : t -> pred_def list
+
+(** Return uninterpreted function symbol definitions as pairs of
+    initial state and transition relation definitions *)
+val uf_defs_pairs : t -> (pred_def * pred_def) list
+
+(** Return [true] if the uninterpreted symbol is a transition relation *)
+val is_trans_uf_def : t -> UfSymbol.t -> bool
+
+(** Return [true] if the uninterpreted symbol is an initial state constraint *)
+val is_init_uf_def : t -> UfSymbol.t -> bool
 
 (** Add an invariant to the transition system *)
 val add_invariant : t -> Term.t -> unit
 
 (** Return current status of all properties *)
 val prop_status_all : t -> (string * prop_status) list
+
+(** Return current status of all properties *)
+val prop_status_all_unknown : t -> (string * prop_status) list
 
 (** Return current status of property *)
 val prop_status : t -> string -> prop_status 
@@ -179,6 +199,7 @@ val iter_uf_definitions : t -> (UfSymbol.t -> Var.t list -> Term.t -> unit) -> u
     from instant zero up to instant [k], which is the third argument. *)
 val path_from_model : t -> (Var.t list -> (Var.t * Term.t) list) -> Numeral.t -> (StateVar.t * Term.t list) list
 
+val exists_eval_on_path : pred_def list -> (Eval.value -> bool) -> Term.t -> (StateVar.t * Term.t list) list -> bool
 
 (* 
    Local Variables:

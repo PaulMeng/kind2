@@ -159,10 +159,10 @@ let rec collect_subterms uf_defs (fterm:Term.T.flat) (acc:((Type.t*Term.TermSet.
     List.fold_left
     
       (fun accum' (t, s) ->
-        merge_in [] (t, s) accum')
         
-    []
-    (f_list@node_subterms)
+        merge_in [] (t, s) accum'
+        
+      ) [] (f_list@node_subterms)
                   
   | Term.T.Const c as f -> 
     
