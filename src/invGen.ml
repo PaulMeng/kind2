@@ -763,7 +763,7 @@ let remove_trivial_invariants invariants =
 
 (*Recursively instantiate up to the top node*)
 (* Instantiate subnode invariants up to the top node*)
-let rec instantiate_invariant_upto_top_node paired_up_invariants accum =
+let rec instantiate_invariant_upto_top_node paired_up_invariants accum ts =
   
   match paired_up_invariants with
 
@@ -807,9 +807,11 @@ let rec instantiate_invariant_upto_top_node paired_up_invariants accum =
         | [] -> 
           
           (
-            if (true) then
+            let trans_top = TransSys.trans_top ts in
+            
+            if UfSymbol.equal_uf_symbols (fst trans_top) symbol then
               
-              let var_value_list = () in
+              let var_value_list = snd trans_top in
               
               let top_invariant = 
                 
@@ -831,6 +833,7 @@ let rec instantiate_invariant_upto_top_node paired_up_invariants accum =
       instantiate_invariant_upto_top_node 
         (paired_up_invariants'@tl) 
         accum'
+        ts
     )
 
 (* Produce invariants*)
@@ -912,7 +915,7 @@ let rec produce_invariants all_candidate_terms bmc_solver ind_solver ts ind_k in
             
             let top_node_invariants_list, subnode_invariant_list = 
               
-              instantiate_invariant_upto_top_node paired_up_invariants ([], [])
+              instantiate_invariant_upto_top_node paired_up_invariants ([], []) ts
               
             in
             
