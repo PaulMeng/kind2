@@ -263,7 +263,7 @@ let extract_candidate_terms ts =
         
           fst trans_pred, (extract_terms ts (fst trans_pred) (snd (snd trans_pred))))
         
-      ) ts.TransSys.pred_defs 
+      ) (TransSys.uf_defs_pairs ts)
   in
   
   List.map 
@@ -654,9 +654,7 @@ let mk_candidate_invariants () =
      ) nodes_hashtl []
     
   in
-  
-  (debug inv "################Number of Nodes = %d" (THT.length nodes_hashtl) end);
-  
+    
   (*Make candidate invariants out of edges*)
   let candidate_invariants' =
     
@@ -806,7 +804,25 @@ let rec instantiate_invariant_upto_top_node paired_up_invariants accum =
         
         match calling_node_list with
 
-        | [] -> (term::(fst accum), snd accum)
+        | [] -> 
+          
+          (
+            if (true) then
+              
+              let var_value_list = () in
+              
+              let top_invariant = 
+                
+                Term.mk_let var_value_list term
+              
+              in
+              
+              (top_invariant::(fst accum), snd accum)
+            
+            else
+              
+              (fst accum, term::(snd accum))            
+          )
 
         | _ -> (fst accum, term::(snd accum))
 
