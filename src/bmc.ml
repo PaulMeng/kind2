@@ -168,43 +168,11 @@ let bmc_step_round solver trans_sys k props_kfalse properties =
       
       (props_unknown, props_kfalse'', p_k_model)
 
-      (*(* All properties falsified? *)
-      if props_unknown = [] then 
-
-        (
-
-          (* Remove negated properties after check *)
-          S.pop solver;
-
-          (* All remaining properties are false in k steps *)
-          (props_unknown, props_kfalse'')
-
-        )
-
-      else
-        
-        (* Continue with properties that may be true *)
-        bmc_step_loop 
-          solver
-          trans_sys
-          k
-          props_kfalse''
-          props_unknown*)
-
     )
 
   else
 
     (
-
-      (* Remove negated properties after check *)
-      S.pop solver;
-
-      (* Assert k-true properties as invariants *)
-      List.iter 
-        (fun (_, t) -> 
-           S.assert_term solver (Term.bump_state k t))
-        properties;
 
       (* All remaining properties are true in k steps *)
       (properties, props_kfalse, []))
@@ -213,12 +181,29 @@ let bmc_step_round solver trans_sys k props_kfalse properties =
 let rec bmc_step_loop solver trans_sys k props_kfalse properties = 
   
   let props_unknown, props_kfalse, _ = 
+    
     bmc_step_round solver trans_sys k props_kfalse properties
+    
   in
   
   if props_kfalse = [] then
+    (
+      
+      (* Remove negated properties after check *)
+      S.pop solver;
+      
+      (* Assert k-true properties as invariants *)
+      List.iter 
+        (fun (_, t) -> 
+           S.assert_term solver (Term.bump_state k t))
+        properties;
+      
+      
+      (properties, props_kfalse)      
+      
+    )
     
-    (properties, props_kfalse)
+
     
   else if props_unknown = [] then 
     
@@ -238,8 +223,7 @@ let rec bmc_step_loop solver trans_sys k props_kfalse properties =
         trans_sys
         k
         props_kfalse
-        props_unknown
-        
+        props_unknown   
         
 (*set up bmc background*)
 let bmc_setup_context check_ts_props solver trans_sys k properties =
@@ -324,12 +308,49 @@ let bmc_step check_ts_props solver trans_sys k properties =
 
 
 (*Bmc for invariant generation*)
-let bmc_invgen_step check_ts_props solver trans_sys k properties =
+let bmc_invgen_step check_ts_props solver trans_sys pred_k k properties invariants =
   
-  (*set up bmc context*)
-  bmc_setup_context check_ts_props solver trans_sys k properties;
+  if not (Numeral.equal pred_k k) then
+    (
+      if Numeral.gt k Numeral.zero then
+        (*Remove the negated properties in previous step*)
+        S.pop solver;
+      
+      (* Assert received invariants up to k-1 *)
+      List.iter 
+        (fun (_, t) -> assert_upto_k solver (Numeral.pred k) t) 
+          invariants;
+      
+      (*set up bmc context*)
+      bmc_setup_context check_ts_props solver trans_sys k properties
+    );
+   
+    
+  let k_minus_one = Numeral.pred k in
+  (* Receive queued messages 
+
+  Side effect: Terminate when ControlMessage TERM is received.*)
+  let messages = Event.recv () in
+    
+  (* Update transition system from messages *)
+  let invariants_recvd, prop_status = 
+    
+    Event.update_trans_sys trans_sys messages 
+    
+  in
+    
+  (* Assert received invariants up to k-1 *)
+  List.iter 
+    (fun (_, t) -> assert_upto_k solver k_minus_one t) 
+      invariants_recvd;
   
-  bmc_step_round solver trans_sys k [] properties
+  let props_valid, props_invalid, model = 
+    
+    bmc_step_round solver trans_sys k [] properties
+    
+  in
+    
+  (props_valid, props_invalid, model, invariants_recvd)
 
 
 

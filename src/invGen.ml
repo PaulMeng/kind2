@@ -37,6 +37,7 @@ let on_exit _ = ()
 (* Hashtables for the implication graph*)
 
 module THT = Term.TermHashtbl
+module UHT = UfSymbol.UfSymbolHashtbl
 
 (* Map of term representative to a term list it represents*)
 let nodes_hashtl = Term.TermHashtbl.create 7
@@ -67,7 +68,8 @@ let rec merge_in accum (t, s) = function
         
     else
       
-      merge_in ((t', s')::accum) (t, s) tl      
+      merge_in ((t', s')::accum) (t, s) tl    
+
 
 (* Make mode terms from mode variables*)
 let rec make_mode_terms t ubound lbound acc =
@@ -82,7 +84,7 @@ let rec make_mode_terms t ubound lbound acc =
     
     
 (* collect all subterms from a term*)
-let rec collect_subterms uf_defs (fterm:Term.T.flat) (acc:((Type.t*Term.TermSet.t) list) list) : (Type.t*Term.TermSet.t) list =
+let rec collect_subterms ts calling_node_symbol (fterm:Term.T.flat) (acc:((Type.t*Term.TermSet.t) list) list) : (Type.t*Term.TermSet.t) list =
   
   match fterm with
   
@@ -97,6 +99,10 @@ let rec collect_subterms uf_defs (fterm:Term.T.flat) (acc:((Type.t*Term.TermSet.
           
           try 
             
+            let uf_defs = TransSys.uf_defs ts in
+            
+            let uf_symbol_of_term_symbol = Symbol.uf_of_symbol s in
+            
             (* Find the uf_def *)
             let uf_def = 
               
@@ -104,20 +110,27 @@ let rec collect_subterms uf_defs (fterm:Term.T.flat) (acc:((Type.t*Term.TermSet.
               
                 (fun (symbol, t) ->
                   
-                  symbol = Symbol.uf_of_symbol s)
+                  symbol = uf_symbol_of_term_symbol)
                   
                 uf_defs
                 
             in
             
             (debug inv "calling subnode = %s " (UfSymbol.string_of_uf_symbol (fst uf_def)) end);
-          
+            
             (* Paire up variables and values *)
             let var_value_pair_list = 
               
               List.combine (fst (snd uf_def)) l
               
             in
+            
+            (* Add only the transition state of callee and calling nodes to the hashtable*)
+            if TransSys.is_trans_uf_def ts uf_symbol_of_term_symbol then
+              
+              (
+                UHT.add node_calls_hashtl uf_symbol_of_term_symbol (calling_node_symbol, var_value_pair_list)
+              );            
             
             (* Make let bindings for the uninterpreted function*)
             let let_binding_uf_term = 
@@ -127,7 +140,7 @@ let rec collect_subterms uf_defs (fterm:Term.T.flat) (acc:((Type.t*Term.TermSet.
             in
             
             (* Recurse into the uninterpreted function to extract subterms*)
-            extract_terms uf_defs let_binding_uf_term
+            extract_terms ts uf_symbol_of_term_symbol let_binding_uf_term
             
           with Not_found -> failwith "uf_def not found!"
           
@@ -229,9 +242,9 @@ let rec collect_subterms uf_defs (fterm:Term.T.flat) (acc:((Type.t*Term.TermSet.
   | Term.T.Attr (t, _) -> List.flatten acc
     
 (** Extract all subterms from a term *)  
-and extract_terms uf_defs t =
+and extract_terms ts calling_node_symbol t =
   
-  Term.eval_t (collect_subterms uf_defs) t
+  Term.eval_t (collect_subterms ts calling_node_symbol) t
   
 
 (** Extract canddiate terms from uf_defs*)
@@ -246,9 +259,9 @@ let extract_candidate_terms ts =
     
       (fun (init_pred, trans_pred) ->
         
-        (fst init_pred, (extract_terms uf_defs (snd (snd init_pred))), 
+        (fst init_pred, (extract_terms ts (fst init_pred) (snd (snd init_pred))), 
         
-          fst trans_pred, (extract_terms uf_defs (snd (snd trans_pred))))
+          fst trans_pred, (extract_terms ts (fst trans_pred) (snd (snd trans_pred))))
         
       ) ts.TransSys.pred_defs 
   in
@@ -682,12 +695,12 @@ let list_difference l_1 l_2 =
   
 
 (*Call BMC to create stable implication graph*)
-let rec create_stable_graph solver ts k candidate_invs refined =
+let rec create_stable_graph solver ts pred_k k candidate_invs refined global_invariants =
   
   (* Call BMC until no properties disproved at current step*)
-  let props_unknown, props_invalid, model = 
+  let (props_unknown, props_invalid, model, invariants_recvd) = 
     
-    Bmc.bmc_invgen_step false solver ts k candidate_invs
+    Bmc.bmc_invgen_step false solver ts pred_k k candidate_invs global_invariants
     
   in
   
@@ -696,36 +709,30 @@ let rec create_stable_graph solver ts k candidate_invs refined =
   bmcK := k;
   (debug inv " BMC k = %d" (Numeral.to_int k) end);
   
-  (*
-  List.iter
-  (fun (cex,prop) ->
-    
-    List.iter 
-      (fun (name, p) -> 
-        (debug inv "props_invalid  = %s" (Term.string_of_term p) end);
-      ) prop
-    
-    ) props_invalid;*)
-  
   (*rebuild the graph if some candidate invariants are disproved by BMC*)
   if List.length props_invalid <> 0 then
+    
     (
       let uf_defs = TransSys.uf_defs ts in
     
       rebuild_graph uf_defs model k;
         
-      create_stable_graph solver ts k (mk_candidate_invariants ()) false
+      create_stable_graph solver ts k k (mk_candidate_invariants ()) false invariants_recvd
     )
+    
   else
+    
     (
       
       if not refined then
-        create_stable_graph solver ts (Numeral.succ k) (mk_candidate_invariants ()) true
+        
+        create_stable_graph solver ts k (Numeral.succ k) (mk_candidate_invariants ()) true []
       
     )
 
 (* Add "TRUE" "FALSE" terms to the boolean candidate terms list*)    
 let add_true_false_terms bool_terms =
+
   if
     not 
     ((Term.TermSet.mem Term.t_true bool_terms) || (Term.TermSet.mem Term.t_false bool_terms)) 
@@ -755,18 +762,79 @@ let remove_trivial_invariants invariants =
 
     ) invariants
 
-let rec produce_invariants bmc_solver ind_solver ts ind_k invariants = 
+
+(*Recursively instantiate up to the top node*)
+(* Instantiate subnode invariants up to the top node*)
+let rec instantiate_invariant_upto_top_node paired_up_invariants accum =
   
+  match paired_up_invariants with
+
+  | [] -> accum
+
+  | (symbol, term)::tl -> 
+    
+    (
+      
+      let calling_node_list = 
+        
+        try 
+      
+          UHT.find_all node_calls_hashtl symbol 
+      
+        with Not_found -> []
+      
+      in
+      
+      let paired_up_invariants' = 
+        
+        List.map
+        
+          (fun (calling_symbol, var_value_list) ->
+            
+            let let_binding_term = 
+              
+              Term.mk_let var_value_list term
+            
+            in
+            
+            (calling_symbol, let_binding_term)
+            
+          ) calling_node_list
+      in
+      
+      let accum' = 
+        
+        match calling_node_list with
+
+        | [] -> (term::(fst accum), snd accum)
+
+        | _ -> (fst accum, term::(snd accum))
+
+      in
+      
+      instantiate_invariant_upto_top_node 
+        (paired_up_invariants'@tl) 
+        accum'
+    )
+
+(* Produce invariants*)
+let rec produce_invariants all_candidate_terms bmc_solver ind_solver ts ind_k invariants = 
+        
   (debug inv " after creating stable graph candidate_invariants length = %d" (List.length (mk_candidate_invariants ())) end);
   
   let candidate_invariants = 
+    
     (list_difference (mk_candidate_invariants ()) invariants)
+    
   in
   
   match candidate_invariants with
+
+
   | [] -> (debug inv "No more candiate invariants!" end);
   
   | _ ->
+    
     (
       let props_k_ind, props_not_k_ind = 
         
@@ -778,19 +846,71 @@ let rec produce_invariants bmc_solver ind_solver ts ind_k invariants =
           ind_k
         
       in
+      
       (debug inv "ind_k = %d" (Numeral.to_int ind_k) end);
       (debug inv "bmc_k = %d" (Numeral.to_int !bmcK) end);
+      
       (*Send out invariants props_k_ind*)
       if (List.length props_k_ind) <> 0 && (Numeral.leq ind_k !bmcK) then
         (
-          (*Remove trivial invariants*)
-          (*Send out invariants*)
-          List.iter
-            (fun (name, term) -> 
-              (debug inv "  invariant = %s" (Term.string_of_term term) end);
-              Event.invariant term
-            ) (remove_trivial_invariants props_k_ind); 
-          
+          (*Remove trivial invariants and pair them up with node symbols*)
+          let paired_up_invariants =
+            
+            List.fold_left
+            
+              (fun accum (_, term) ->
+                
+                let var = 
+                    
+                    List.hd (Var.VarSet.elements (Term.vars_of_term term)) 
+                    
+                  in
+                  
+                let node = 
+                  
+                  try
+                    
+                    List.find
+                    
+                      (fun (symbol, type_term_list) ->
+                        
+                        List.exists
+                        
+                          (fun (_, term_set) ->
+                            
+                            Term.TermSet.mem (Term.mk_var var) term_set
+                            
+                          ) type_term_list
+                          
+                      ) all_candidate_terms
+                      
+                  with Not_found -> raise Not_found
+                    
+                in                 
+                
+                (fst node, term)::accum
+                
+              ) [] (remove_trivial_invariants props_k_ind)
+              
+            in 
+            
+            let top_node_invariants_list, subnode_invariant_list = 
+              
+              instantiate_invariant_upto_top_node paired_up_invariants ([], [])
+              
+            in
+            
+            (*Assert intermediate invariants up to k -1 *)
+
+            
+            List.iter
+            
+              (fun inv ->
+                (debug inv "top node invariant = %s" (Term.string_of_term inv) end);
+                Event.invariant inv
+                
+              ) top_node_invariants_list
+           
         );
       
       if ((List.length props_not_k_ind) <> 0 && (Numeral.gt ind_k !bmcK) ) then
@@ -798,13 +918,15 @@ let rec produce_invariants bmc_solver ind_solver ts ind_k invariants =
         ( 
           create_stable_graph 
             bmc_solver 
-            ts 
+            ts
+            !bmcK 
             (Numeral.succ !bmcK) 
             (list_difference (mk_candidate_invariants ()) invariants)
             false
+            []
         );
         
-      produce_invariants bmc_solver ind_solver ts  (Numeral.succ ind_k) (List.rev_append invariants props_k_ind) 
+      produce_invariants all_candidate_terms bmc_solver ind_solver ts  (Numeral.succ ind_k) (List.rev_append invariants props_k_ind) 
       
     )
   
@@ -945,12 +1067,14 @@ let inv_gen trans_sys =
       
       
       (*Create a stable implication graph by BMC*)
-      create_stable_graph bmc_solver trans_sys Numeral.zero (mk_candidate_invariants ()) false;
+      create_stable_graph bmc_solver trans_sys (Numeral.pred Numeral.zero) Numeral.zero (mk_candidate_invariants ()) false [];
       
-      produce_invariants bmc_solver ind_solver trans_sys Numeral.zero []
+      produce_invariants candidate_terms bmc_solver ind_solver trans_sys Numeral.zero []
       
     )
+    
   else
+    
     (debug inv "No boolean candidate terms proposed!" end)
 
 (* Entry point *)
