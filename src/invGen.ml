@@ -693,12 +693,12 @@ let list_difference l_1 l_2 =
   
 
 (*Call BMC to create stable implication graph*)
-let rec create_stable_graph solver ts pred_k k candidate_invs refined global_invariants =
+let rec create_stable_graph solver ts new_step k candidate_invs refined global_invariants =
   
   (* Call BMC until no properties disproved at current step*)
   let (props_unknown, props_invalid, model, invariants_recvd) = 
     
-    Bmc.bmc_invgen_step false solver ts pred_k k candidate_invs global_invariants
+    Bmc.bmc_invgen_step false solver ts new_step k candidate_invs global_invariants
     
   in
   
@@ -715,7 +715,7 @@ let rec create_stable_graph solver ts pred_k k candidate_invs refined global_inv
     
       rebuild_graph uf_defs model k;
         
-      create_stable_graph solver ts k k (mk_candidate_invariants ()) false invariants_recvd
+      create_stable_graph solver ts false k (mk_candidate_invariants ()) false invariants_recvd
     )
     
   else
@@ -724,7 +724,7 @@ let rec create_stable_graph solver ts pred_k k candidate_invs refined global_inv
       
       if not refined then
         
-        create_stable_graph solver ts k (Numeral.succ k) (mk_candidate_invariants ()) true []
+        create_stable_graph solver ts true (Numeral.succ k) (mk_candidate_invariants ()) true []
       
     )
 
@@ -938,7 +938,7 @@ let rec produce_invariants all_candidate_terms bmc_solver ind_solver ts ind_k in
           create_stable_graph 
             bmc_solver 
             ts
-            !bmcK 
+            true
             (Numeral.succ !bmcK) 
             (list_difference (mk_candidate_invariants ()) invariants)
             false
@@ -1086,7 +1086,7 @@ let inv_gen trans_sys =
       
       
       (*Create a stable implication graph by BMC*)
-      create_stable_graph bmc_solver trans_sys (Numeral.pred Numeral.zero) Numeral.zero (mk_candidate_invariants ()) false [];
+      create_stable_graph bmc_solver trans_sys true Numeral.zero (mk_candidate_invariants ()) false [];
       
       produce_invariants candidate_terms bmc_solver ind_solver trans_sys Numeral.zero []
       

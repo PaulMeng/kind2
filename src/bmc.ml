@@ -308,9 +308,9 @@ let bmc_step check_ts_props solver trans_sys k properties =
 
 
 (*Bmc for invariant generation*)
-let bmc_invgen_step check_ts_props solver trans_sys pred_k k properties invariants =
+let bmc_invgen_step check_ts_props solver trans_sys new_step k properties invariants =
   
-  if not (Numeral.equal pred_k k) then
+  if new_step then
     (
       if Numeral.gt k Numeral.zero then
         (*Remove the negated properties in previous step*)
@@ -349,6 +349,7 @@ let bmc_invgen_step check_ts_props solver trans_sys pred_k k properties invarian
     bmc_step_round solver trans_sys k [] properties
     
   in
+  
     
   (props_valid, props_invalid, model, invariants_recvd)
 

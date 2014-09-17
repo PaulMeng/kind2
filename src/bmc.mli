@@ -41,7 +41,7 @@ val bmc_step : bool -> S.t -> TransSys.t -> Numeral.t -> (string * Term.t) list 
 
 
 (***)
-val bmc_invgen_step : bool -> S.t -> TransSys.t -> Numeral.t -> Numeral.t -> (string * Term.t) list -> (Lib.kind_module * Term.t) list -> (string * Term.t) list * ((StateVar.t * Term.t list) list * (string * Term.t) list) list * (Var.t * Term.t) list * (Lib.kind_module * Term.t) list
+val bmc_invgen_step : bool -> S.t -> TransSys.t -> bool -> Numeral.t -> (string * Term.t) list -> (Lib.kind_module * Term.t) list -> (string * Term.t) list * ((StateVar.t * Term.t list) list * (string * Term.t) list) list * (Var.t * Term.t) list * (Lib.kind_module * Term.t) list
 
 (** Entry point *)
 val main : TransSys.t -> unit
