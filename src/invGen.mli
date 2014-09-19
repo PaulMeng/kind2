@@ -18,7 +18,7 @@
 
 (** Invariant generator
 
-    @author Christoph Sticksel *)
+    @author Paul Meng *)
 
 (** Entry point *)
 val main : TransSys.t -> unit

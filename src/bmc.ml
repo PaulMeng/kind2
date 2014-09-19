@@ -89,15 +89,30 @@ let assert_upto_k solver k term =
    queries, since it will be subsumed by the current query.
 *)
 let bmc_step_round solver trans_sys k props_kfalse properties = 
-
+  
   (* Assert negated properties ~(P_1[x_k] & ... & P_n[x_k]) *)
-  S.assert_term solver
-    (Term.bump_state k (Term.negate (Term.mk_and (List.map snd properties))));
+  
+  let properties' = List.map snd properties
+  in
+  
+  let and_properties = Term.mk_and properties'
+  in
+  
+  let negated_and_properties = Term.negate and_properties
+  in
+  
+  let negated_and_properties = Term.negate and_properties
+  in
 
+  let bump_state_negated_and_properties = Term.bump_state k negated_and_properties
+  in
+
+  S.assert_term solver bump_state_negated_and_properties;
+  
   (* Are all properties entailed? *)
   if 
 
-    (debug bmc
+    (*(debug bmc
         "@[<v>Current context@,@[<hv>%a@]@]"
         HStringSExpr.pp_print_sexpr_list
         (let r, a = 
@@ -105,15 +120,13 @@ let bmc_step_round solver trans_sys k props_kfalse properties =
          in
          S.fail_on_smt_error r;
          a)
-     in
+     in*)
      
-     S.check_sat solver)
+     S.check_sat solver
 
   then 
 
     (
-      
-      (debug bmc "bmc debug!!! property length here = %d" (List.length properties) end);
 
       (* Definitions of predicates *)
       let uf_defs = TransSys.uf_defs trans_sys in
@@ -173,7 +186,7 @@ let bmc_step_round solver trans_sys k props_kfalse properties =
   else
 
     (
-
+      (debug inv "7777777777777777!" end);
       (* All remaining properties are true in k steps *)
       (properties, props_kfalse, []))
     
@@ -312,16 +325,13 @@ let bmc_invgen_step check_ts_props solver trans_sys new_step k properties invari
   
   if new_step then
     (
-      if Numeral.gt k Numeral.zero then
-        (*Remove the negated properties in previous step*)
-        S.pop solver;
       
       (* Assert received invariants up to k-1 *)
       List.iter 
         (fun (_, t) -> assert_upto_k solver (Numeral.pred k) t) 
           invariants;
       
-      (*set up bmc context*)
+      (*set up bmc context for a new step*)
       bmc_setup_context check_ts_props solver trans_sys k properties
     );
    
@@ -338,17 +348,29 @@ let bmc_invgen_step check_ts_props solver trans_sys new_step k properties invari
     Event.update_trans_sys trans_sys messages 
     
   in
-    
+  (debug inv "3333333333333333333!" end);  
   (* Assert received invariants up to k-1 *)
   List.iter 
     (fun (_, t) -> assert_upto_k solver k_minus_one t) 
       invariants_recvd;
-  
+  (debug inv "44444444444444!" end);
   let props_valid, props_invalid, model = 
     
     bmc_step_round solver trans_sys k [] properties
     
   in
+  (debug inv "99999999999999!" end);
+  if props_invalid = [] then
+    
+    (
+      S.pop solver; 
+      
+      (* Assert k-true properties as invariants *)
+      List.iter 
+        (fun (_, t) -> 
+           S.assert_term solver (Term.bump_state k t))
+        props_valid;
+    );
   
     
   (props_valid, props_invalid, model, invariants_recvd)
