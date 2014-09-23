@@ -186,7 +186,7 @@ let bmc_step_round solver trans_sys k props_kfalse properties =
   else
 
     (
-      (debug inv "7777777777777777!" end);
+      
       (* All remaining properties are true in k steps *)
       (properties, props_kfalse, []))
     
@@ -348,18 +348,18 @@ let bmc_invgen_step check_ts_props solver trans_sys new_step k properties invari
     Event.update_trans_sys trans_sys messages 
     
   in
-  (debug inv "3333333333333333333!" end);  
+    
   (* Assert received invariants up to k-1 *)
   List.iter 
     (fun (_, t) -> assert_upto_k solver k_minus_one t) 
       invariants_recvd;
-  (debug inv "44444444444444!" end);
+  
   let props_valid, props_invalid, model = 
     
     bmc_step_round solver trans_sys k [] properties
     
   in
-  (debug inv "99999999999999!" end);
+  
   if props_invalid = [] then
     
     (

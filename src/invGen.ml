@@ -119,7 +119,7 @@ let rec collect_subterms ts calling_node_symbol (fterm:Term.T.flat) (acc:((Type.
                 
             in
             
-            (debug inv "calling subnode = %s " (UfSymbol.string_of_uf_symbol (fst uf_def)) end);
+           (* (debug inv "calling subnode = %s " (UfSymbol.string_of_uf_symbol (fst uf_def)) end);*)
             
             (* Paire up variables and values *)
             let var_value_pair_list = 
@@ -288,7 +288,7 @@ let extract_candidate_terms ts =
 
             | Term.T.App (s, l) when (Symbol.equal_symbols s Symbol.s_and) ->
               
-              termset_of_list (Term.node_args_of_term init_def) 
+              termset_of_list l 
               
             | _ -> TTS.singleton init_def
           )
@@ -298,8 +298,8 @@ let extract_candidate_terms ts =
             match flat_term with
 
             | Term.T.App (s, l) when (Symbol.equal_symbols s Symbol.s_and) ->
-              
-              termset_of_list (Term.node_args_of_term trans_def) 
+              (debug inv "trans_def = %s" (Term.string_of_term trans_def) end);
+              termset_of_list l 
               
             | _ -> TTS.singleton trans_def
           )
@@ -327,7 +327,7 @@ let extract_candidate_terms ts =
                         TTS.add elt accum
                       )
                       TTS.empty
-                      (Term.node_args_of_term term)
+                      l
                     )    
                                                      
               | _ -> TTS.add term term_set 
@@ -745,7 +745,7 @@ let mk_candidate_invariants () =
         
     outgoing_hashtl []
   in
-  (debug inv "After Making candidate invariants!" end);
+  (*(debug inv "After Making candidate invariants!" end);*)
   List.rev_append candidate_invariants candidate_invariants'
 
 (* Compute the difference of two lists*)
@@ -764,18 +764,18 @@ let list_difference l_1 l_2 =
 
 (*Call BMC to create stable implication graph*)
 let rec create_stable_graph solver ts new_step k candidate_invs refined global_invariants =
-  (debug inv "Before calling BMC!" end);
+  (*(debug inv "Before calling BMC!" end);*)
   (* Call BMC until no properties disproved at current step*)
   let (props_unknown, props_invalid, model, invariants_recvd) = 
     
     Bmc.bmc_invgen_step false solver ts new_step k candidate_invs global_invariants
     
   in
-  (debug inv "After calling BMC!" end);
+  (*(debug inv "After calling BMC!" end);*)
   
   (*Record current bmc step*)
   bmcK := k;
-  (debug inv " BMC k = %d" (Numeral.to_int k) end);
+  (*(debug inv " BMC k = %d" (Numeral.to_int k) end);*)
   
   (*rebuild the graph if some candidate invariants are disproved by BMC*)
   if List.length props_invalid <> 0 then
@@ -783,7 +783,7 @@ let rec create_stable_graph solver ts new_step k candidate_invs refined global_i
     (
       let uf_defs = TransSys.uf_defs ts in
       
-      (debug inv "Still not stable yet ........" end);
+     (* (debug inv "Still not stable yet ........" end);*)
     
       rebuild_graph uf_defs model k;
         
@@ -982,7 +982,7 @@ let verify_invariants trans_sys invariants =
     in
 
     
-    (debug inv "############ The number of disproved props by BMC = %d at step k = %d" (List.length props_invalid) (Numeral.to_int !k) end);
+    (*(debug inv "############ The number of disproved props by BMC = %d at step k = %d" (List.length props_invalid) (Numeral.to_int !k) end);*)
     
     let props_valid', props_invalid' =
 
@@ -990,13 +990,23 @@ let verify_invariants trans_sys invariants =
       
     in   
     
-    (debug inv "$$$$$$$$$$$$ The number of disproved props by IND = %d at step k = %d" (List.length props_invalid') (Numeral.to_int !k) end); 
+    (*(debug inv "$$$$$$$$$$$$ The number of disproved props by IND = %d at step k = %d" (List.length props_invalid') (Numeral.to_int !k) end);*) 
     
     if not (props_invalid = []) then
       (
         quit_loop := true;
         
-        (debug inv "!!!!!!!!!!!!!!!!!!!! Caught one false invariant!" end); 
+        (debug inv "!!!!!!!!!!!!!!!!!!!! Caught some false invariant!" end);
+        
+        List.iter
+          (fun (cex, false_inv) ->
+            List.iter
+              (fun (name, inv) ->
+                (debug inv "False invariant = %s" (Term.string_of_term inv) end);
+                )
+              false_inv;
+          )
+          props_invalid;
       );
     
     
@@ -1004,7 +1014,7 @@ let verify_invariants trans_sys invariants =
       (
         quit_loop := true;
         
-        (debug inv "All invariants are true invariants!" end); 
+        (debug inv "~~~~~~~~~ All invariants are true invariants!" end); 
       )
       
     
@@ -1014,7 +1024,7 @@ let verify_invariants trans_sys invariants =
 (* Produce invariants*)
 let rec produce_invariants all_candidate_terms bmc_solver ind_solver ts ind_k invariants = 
         
-  (debug inv " after creating stable graph candidate_invariants length = %d" (List.length (mk_candidate_invariants ())) end);
+  (*(debug inv " after creating stable graph candidate_invariants length = %d" (List.length (mk_candidate_invariants ())) end);*)
   
   let candidate_invariants = 
     
@@ -1103,11 +1113,12 @@ let rec produce_invariants all_candidate_terms bmc_solver ind_solver ts ind_k in
             
             verify_invariants ts inv';
 
-            
+            (debug inv "The total number of invariant found =  %d" (List.length top_node_invariants_list) end);
             List.iter
             
               (fun inv ->
-                (debug inv "top node invariant = %s" (Term.string_of_term inv) end);
+                
+                (*(debug inv "top node invariant = %s" (Term.string_of_term inv) end);*)
                 Event.invariant inv
                 
               ) top_node_invariants_list
