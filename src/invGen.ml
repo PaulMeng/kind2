@@ -24,6 +24,7 @@ let period = 0.5
 
 (* Current step in BMC *)
 let bmcK = ref Numeral.zero
+let once = ref true
 
 (* Current step in IND *)
 let indK = ref Numeral.zero
@@ -370,7 +371,21 @@ let extract_candidate_terms ts =
   term_sets_list
 
 
+(*Pick an initial representative for equivalence class other than true or false term*)
+(*to avoid conflict*)
+let rec pick_rep_term term_list =
+  
+  match term_list with
 
+  | [] -> assert false
+  | hd::tl -> 
+    
+    if not ((Term.equal hd Term.t_true) || (Term.equal hd Term.t_false)) then
+      hd
+    else if tl = [] then
+      snd (Term.mk_named hd)
+    else
+      pick_rep_term tl
   
 (* Safely add an edge to the edge hashtables*)  
 let edge_hashtbl_safe_add ht (n_1:Term.t) (n_2:Term.t):unit = 
@@ -601,7 +616,7 @@ let rebuild_graph uf_defs model k =
     THT.fold
     
       (fun rep term_list accum ->
-      
+          
         let (t_list_1, t_list_0) =
           
           List.partition
@@ -613,6 +628,12 @@ let rebuild_graph uf_defs model k =
             
         in
         
+        if !once then
+          (
+            (debug inv "~~~~~~~~~~~~~~~ rebuild graph rep = %s $$ t_1_length = %d t_0_length = %d" (Term.string_of_term rep) (List.length t_list_1) (List.length t_list_0) end);
+            
+            );
+        
         (*(debug inv "2 chains: List1.length= %d ; List0.length= %d"(List.length t_list_1) (List.length t_list_0) end);
         
         (debug inv "3 rep = %s" (Term.string_of_term rep) end);*)
@@ -621,24 +642,30 @@ let rebuild_graph uf_defs model k =
         
         | ([], []) -> assert false
         
-        | ([], hd::tl) -> 
-          
+        | ([], _) -> 
+          (debug inv "list length = %d" (List.length t_list_1) end);
           let unique_term_rep = snd (Term.mk_named Term.t_false) in
-          THT.replace new_nodes_hashtl hd t_list_1;
+          let rep_1 = pick_rep_term t_list_1 in
+          
+          THT.replace new_nodes_hashtl rep_1 t_list_1;
           THT.replace new_nodes_hashtl unique_term_rep t_list_0;
           
-          (rep, ((hd, t_list_1), (unique_term_rep, t_list_0)))::accum
+          (rep, ((rep_1, t_list_1), (unique_term_rep, t_list_0)))::accum
           
-        | (hd::tl, []) ->
+        | (_, []) ->
           
           let unique_term_rep = snd (Term.mk_named Term.t_true) in
+          let rep_0 = pick_rep_term t_list_0 in
           
-          THT.replace new_nodes_hashtl hd t_list_0;
+          THT.replace new_nodes_hashtl rep_0 t_list_0;
           THT.replace new_nodes_hashtl unique_term_rep t_list_1;
           
-          (rep, ((unique_term_rep, t_list_1), (hd, t_list_0)))::accum
+          (rep, ((unique_term_rep, t_list_1), (rep_0, t_list_0)))::accum
           
-        | (rep_0::tl_0, rep_1::tl_1) ->
+        | (_, _) ->
+          (debug inv "list length = %d" (List.length t_list_1) end);
+          let rep_0 = pick_rep_term t_list_0 in
+          let rep_1 = pick_rep_term t_list_1 in
           
           (*Add the edges from 0 node to 1 node*)
           edge_hashtbl_safe_add new_outgoing_hashtl rep_0 rep_1;
@@ -652,6 +679,7 @@ let rebuild_graph uf_defs model k =
           
       ) nodes_hashtl []
   in
+  once := false;
   
   (*Update the graph based on chains*)
   update_graph chains;
@@ -748,13 +776,26 @@ let subtract_list l_1 l_2 =
       ) [] l_1
 
 (* Add "TRUE" "FALSE" terms to the boolean candidate terms list*)    
-let add_true_false_terms bool_terms =
+let add_true_false_terms bool_terms_list =
   
-  let t_f_set = 
-    TTS.add Term.t_true (TTS.singleton Term.t_false) 
+  let t_list = 
+    
+    if not (List.mem Term.t_true bool_terms_list) then
+      
+      Term.t_true::bool_terms_list
+      
+    else 
+      
+      bool_terms_list
   in
   
-  TTS.union t_f_set bool_terms
+  if not (List.mem Term.t_false bool_terms_list) then
+    
+    Term.t_false::t_list
+    
+  else 
+    
+    t_list
 
     
 (*Remove trivial invariants such as "true", "false -> bla", "a = a", no vars term and etc*)
@@ -1211,7 +1252,8 @@ let rec produce_invariants all_candidate_terms bmc_solver ind_solver ts ind_k in
       produce_invariants all_candidate_terms bmc_solver ind_solver ts  (Numeral.succ ind_k) (List.rev_append invariants props_k_ind) 
       
     )
-*)  
+*)
+
 
 (* Generate invariants from candidate terms*)
 let inv_gen trans_sys = 
@@ -1223,14 +1265,24 @@ let inv_gen trans_sys =
     
     List.fold_left
     
-      (fun accum (trans_symbol, terms_list) ->
+      (fun accum (trans_symbol, term_set_list) ->
         
-        (trans_symbol, 
-          add_true_false_terms 
-            (try
-              (List.assoc Type.t_bool terms_list)
-             with Not_found -> TTS.empty)
-         )::accum
+        let bool_term_set =
+          
+          try
+              (List.assoc Type.t_bool term_set_list)
+              
+           with Not_found -> TTS.empty
+          
+         in
+        
+         if ((TTS.cardinal bool_term_set) < 3) || (TTS.is_empty bool_term_set) then 
+         
+           accum 
+          
+         else 
+          
+           (trans_symbol, bool_term_set)::accum
         
       )
       [] 
@@ -1359,7 +1411,10 @@ let inv_gen trans_sys =
             (*Use Set.choose*)
             let terms_list = TTS.elements terms_set in
             
-            THT.add nodes_hashtl (List.hd (terms_list)) terms_list;
+            let rep = pick_rep_term terms_list in
+            
+            THT.add nodes_hashtl rep  (add_true_false_terms terms_list);
+            (debug inv "$$$$$$$$$$$$  initial graph rep = %s $$ " (Term.string_of_term rep) end);
             
         ) bool_terms;
       
