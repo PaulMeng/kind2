@@ -92,7 +92,12 @@ let bmc_step_round solver trans_sys k props_kfalse properties =
   
   (* Assert negated properties ~(P_1[x_k] & ... & P_n[x_k]) *)
   
-  let properties' = List.map snd properties
+  let properties' = 
+    List.map 
+      (fun (_, prop) ->
+        Term.bump_state k prop
+      )
+      properties
   in
   
   let and_properties = Term.mk_and properties'
@@ -103,11 +108,11 @@ let bmc_step_round solver trans_sys k props_kfalse properties =
   
   let negated_and_properties = Term.negate and_properties
   in
-
+  (*
   let bump_state_negated_and_properties = Term.bump_state k negated_and_properties
-  in
-
-  S.assert_term solver bump_state_negated_and_properties;
+  in*)
+  
+  S.assert_term solver negated_and_properties;
   
   (* Are all properties entailed? *)
   if 
