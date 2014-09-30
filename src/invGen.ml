@@ -643,7 +643,7 @@ let rebuild_graph uf_defs model k =
         | ([], []) -> assert false
         
         | ([], _) -> 
-          (debug inv "list length = %d" (List.length t_list_1) end);
+          
           let unique_term_rep = snd (Term.mk_named Term.t_false) in
           let rep_1 = pick_rep_term t_list_1 in
           
@@ -663,7 +663,7 @@ let rebuild_graph uf_defs model k =
           (rep, ((unique_term_rep, t_list_1), (rep_0, t_list_0)))::accum
           
         | (_, _) ->
-          (debug inv "list length = %d" (List.length t_list_1) end);
+          
           let rep_0 = pick_rep_term t_list_0 in
           let rep_1 = pick_rep_term t_list_1 in
           
@@ -716,13 +716,15 @@ let mk_candidate_invariants invariants =
               
             else
               
-              let eq_term = Term.mk_eq [rep; t] in
+              (*Remove the name of a named term if it is names*)
+              let rep' = if Term.is_named rep then Term.term_of_named rep else rep in
+              let eq_term = Term.mk_eq [rep'; t] in
               
               if not (is_invariant invariants eq_term) then
                 (
                   count := Numeral.succ !count;
                   (*(debug inv "$$$$$$$$$$$$$$candidate invariant = %s" (Term.string_of_term (Term.mk_eq [rep; t])) end);*)
-                  ("inv_"^(Numeral.string_of_numeral !count), Term.mk_eq [rep; t])::accum'
+                  ("inv_"^(Numeral.string_of_numeral !count), eq_term)::accum'
                 )
                 
               else accum'
@@ -746,7 +748,9 @@ let mk_candidate_invariants invariants =
             
             count := Numeral.succ !count;
             
-            let inv = Term.mk_implies [source; t] in
+            let source' = if Term.is_named source then Term.term_of_named source else source in
+            let t' = if Term.is_named t then Term.term_of_named t else t in
+            let inv = Term.mk_implies [source'; t'] in
             
             if not (is_invariant invariants inv) then
               ("inv_"^(Numeral.string_of_numeral !count), inv)::accum'
@@ -851,7 +855,7 @@ let rec instantiate_invariant_upto_top_node paired_up_invariants accum ts =
         List.map
         
           (fun (calling_symbol, var_value_list) ->                      
-            
+            (*(debug inv "calling node symbol = %s for term = %s" (UfSymbol.string_of_uf_symbol calling_symbol) (Term.string_of_term term) end);*)
             let let_binding_term = 
               
               Term.mk_let var_value_list term
