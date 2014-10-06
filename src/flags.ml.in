@@ -315,6 +315,8 @@ let string_of_invgen_bool_complement = string_of_bool
 
 let invgen_bool_complement_default = false
 
+(* ********** *) 
+
 type ind_compress_equal = bool
     
 let ind_compress_equal_default = true
@@ -813,7 +815,7 @@ let invgen_bool_complement_action o = flags.invgen_bool_complement <- o
   
 let invgen_bool_complement_spec = 
   ("--invgen_bool_complement", 
-   Arg.Bool invgen_mode_invariant_action, 
+   Arg.Bool invgen_bool_complement_action, 
    Format.sprintf "(INVGEN) generate complement of boolean terms as candidate terms (default: %s)" (string_of_invgen_bool_complement invgen_bool_complement_default))
 
 (* ********** *) 

@@ -304,6 +304,36 @@ let pp_print_ind_stats ppf =
     ind_stats_title
     pp_print_stats ind_stats
 
+(* ********** INVGEN statistics ********** *)
+
+let invgen_k = 
+  empty_item "k" 0
+  
+let invgen_num_invs = 
+  empty_item "Number of invariants" 0
+
+let invgen_total_time = 
+  empty_item "Total time" 0.
+
+(* Title for BMC statistics *)
+let invgen_stats_title = "INVGEN"
+
+(* All BMC statistics *)
+let invgen_stats = 
+  [ I invgen_k;
+    I invgen_num_invs;
+    F invgen_total_time ] 
+
+(* Stop and record all times *)
+let invgen_stop_timers () = stop_all_timers invgen_stats
+
+(* Pretty-print BMC statistics items *)
+let pp_print_invgen_stats ppf = 
+
+  Format.fprintf ppf "@[<v>@,[%s]@,%a@]"
+    invgen_stats_title
+    pp_print_stats invgen_stats
+
 
 (* ********** PDR statistics ********** *)
 

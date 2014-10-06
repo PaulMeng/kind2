@@ -23,17 +23,30 @@ let period = 0.5
 
 
 (* Current step in BMC *)
-let bmcK = ref Numeral.zero
 let once = ref true
-
-(* Current step in IND *)
-let indK = ref Numeral.zero
 
 (* Current step in IND *)
 let count = ref Numeral.zero
 
-(* We don't need to clean up anything *)
-let on_exit _ = ()
+
+(* Output statistics *)
+let print_stats () = 
+
+  Event.stat 
+    [Stat.misc_stats_title, Stat.misc_stats;
+     Stat.invgen_stats_title, Stat.invgen_stats;
+     Stat.smt_stats_title, Stat.smt_stats]
+
+
+(* Print stats *)
+let on_exit _ = 
+  
+  (* Stop all timers *)
+  Stat.invgen_stop_timers ();
+  Stat.smt_stop_timers ();
+
+  (* Output statistics *)
+  print_stats ()
 
 (* Hashtables for the implication graph*)
 
@@ -159,21 +172,22 @@ let rec collect_subterms ts calling_node_symbol (fterm:Term.T.flat) (acc:((Type.
         
     in  
 
-    let t = Term.construct app in
-    
-   (* (debug inv "########## app = %s "(Term.string_of_term t) end);*)
+    let t = Term.construct app in    
     
     let t_type = Term.type_of_term t in
     
     let f_list = 
       
       if (Type.equal_types t_type Type.t_bool) && Flags.invgen_bool_complement () then
-        
-        (t_type, TTS.add t (TTS.singleton (Term.negate t)))::(List.flatten acc)
+        (
+         
+          (t_type, TTS.add t (TTS.singleton (Term.negate t)))::(List.flatten acc)
+        )
         
       else 
-        
-        (t_type, TTS.singleton t)::(List.flatten acc)
+        (          
+          (t_type, TTS.singleton t)::(List.flatten acc)
+        )
         
     in
     
@@ -246,7 +260,7 @@ let rec collect_subterms ts calling_node_symbol (fterm:Term.T.flat) (acc:((Type.
               
               [(Type.t_int, TTS.singleton t)]
                   
-          | Type.Bool when (Flags.invgen_bool_complement ())->
+          | Type.Bool when (Flags.invgen_bool_complement ())->                        
             
             [(var_type, TTS.add t (TTS.singleton (Term.negate t)))]    
           
@@ -626,17 +640,7 @@ let rebuild_graph uf_defs model k =
                 (Eval.eval_term uf_defs model (Term.bump_state k t))
             ) term_list
             
-        in
-        
-        if !once then
-          (
-            (debug inv "~~~~~~~~~~~~~~~ rebuild graph rep = %s $$ t_1_length = %d t_0_length = %d" (Term.string_of_term rep) (List.length t_list_1) (List.length t_list_0) end);
-            
-            );
-        
-        (*(debug inv "2 chains: List1.length= %d ; List0.length= %d"(List.length t_list_1) (List.length t_list_0) end);
-        
-        (debug inv "3 rep = %s" (Term.string_of_term rep) end);*)
+        in                        
         
         match (t_list_0, t_list_1) with
         
@@ -695,9 +699,7 @@ let is_invariant invariants term =
     invariants)
 
 (* Make candidate invariants out of the graph*)
-let mk_candidate_invariants invariants = 
-  
-  (*(debug inv "1 Inside mk_candidate_invariants" end);*)
+let mk_candidate_invariants invariants =  
   
   (*Make candidate invariants from nodes*)
   let candidate_invariants =
@@ -763,7 +765,7 @@ let mk_candidate_invariants invariants =
         outgoing_hashtl 
         candidate_invariants
   in
-  (*(debug inv "After Making candidate invariants!" end);*)
+  
   candidate_invariants'
 
 (* Compute the difference of two lists*)
@@ -968,18 +970,13 @@ let verify_invariants trans_sys invariants =
       
       Bmc.bmc_step false bmc_solver trans_sys !k invariants
       
-    in
-
-    
-    (*(debug inv "############ The number of disproved props by BMC = %d at step k = %d" (List.length props_invalid) (Numeral.to_int !k) end);*)
+    in       
     
     let props_valid', props_invalid' =
 
       IndStep.ind_step ind_solver trans_sys [] invariants !k
       
-    in   
-    
-    (*(debug inv "$$$$$$$$$$$$ The number of disproved props by IND = %d at step k = %d" (List.length props_invalid') (Numeral.to_int !k) end);*) 
+    in            
     
     if not (props_invalid = []) then
       (
@@ -1064,7 +1061,7 @@ let send_out_invariants ts all_candidate_terms invariants =
           with Not_found -> assert false
         
         in 
-        (*(debug inv "node symbol = %s " (UfSymbol.string_of_uf_symbol node_symbol) end);*)
+        
         (node_symbol, term)::accum
                 
        )
@@ -1089,12 +1086,14 @@ let send_out_invariants ts all_candidate_terms invariants =
     in
     
     verify_invariants ts inv';
-
+    
+    Stat.set (List.length top_node_invariants_list) Stat.invgen_num_invs;
+   
     (debug inv "The total number of invariant found =  %d" (List.length top_node_invariants_list) end);
     
     List.iter
       (fun inv ->
-        (debug inv "top node invariant = %s" (Term.string_of_term inv) end);
+        (*(debug inv "top node invariant = %s" (Term.string_of_term inv) end);*)
         Event.invariant inv
                 
       )
@@ -1110,6 +1109,10 @@ let rec start_inv_gen all_candidate_terms bmc_solver ind_solver ts k invariants 
   | [] -> (debug inv "No more candidate invariants!" end);
     
   | _ -> 
+    
+    Stat.set (Numeral.to_int k) Stat.invgen_k;
+    
+    Stat.update_time Stat.invgen_total_time;
     
     refine_bmc_step 
       bmc_solver 
@@ -1133,130 +1136,7 @@ let rec start_inv_gen all_candidate_terms bmc_solver ind_solver ts k invariants 
     
     send_out_invariants ts all_candidate_terms (remove_trivial_invariants props_k_ind);
     
-    start_inv_gen all_candidate_terms bmc_solver ind_solver ts (Numeral.succ k) (props_k_ind @ invariants)
-       
-(*
-(* Produce invariants*)
-let rec produce_invariants all_candidate_terms bmc_solver ind_solver ts ind_k invariants = 
-        
-  (*(debug inv " after creating stable graph candidate_invariants length = %d" (List.length (mk_candidate_invariants ())) end);*)
-  
-  let candidate_invariants = 
-    
-    (subtract_list (mk_candidate_invariants ()) invariants)
-    
-  in
-  
-  match candidate_invariants with
-
-
-  | [] -> (debug inv "No more candiate invariants!" end);
-  
-  | _ ->
-    
-    (
-      let props_k_ind, props_not_k_ind = 
-        
-        IndStep.ind_step 
-          ind_solver 
-          ts 
-          [] 
-          candidate_invariants
-          ind_k
-        
-      in
-      
-      (debug inv "ind_k = %d" (Numeral.to_int ind_k) end);
-      (debug inv "bmc_k = %d" (Numeral.to_int !bmcK) end);
-      
-      (*Send out invariants props_k_ind*)
-      if (List.length props_k_ind) <> 0 && (Numeral.leq ind_k !bmcK) then
-        (
-          (*Remove trivial invariants and pair them up with node symbols*)
-          let paired_up_invariants =
-            
-            List.fold_left
-            
-              (fun accum (_, term) ->
-                
-                let var = 
-                    
-                    List.hd (Var.VarSet.elements (Term.vars_of_term term)) 
-                    
-                  in
-                  
-                let node = 
-                  
-                  try
-                    
-                    List.find
-                    
-                      (fun (symbol, type_term_list) ->
-                        
-                        List.exists
-                        
-                          (fun (_, term_set) ->
-                            
-                            TTS.mem (Term.mk_var var) term_set
-                            
-                          ) type_term_list
-                          
-                      ) all_candidate_terms
-                      
-                  with Not_found -> raise Not_found
-                    
-                in                 
-                
-                (fst node, term)::accum
-                
-              ) [] props_k_ind
-              
-            in 
-            
-            let top_node_invariants_list, subnode_invariant_list = 
-              
-              instantiate_invariant_upto_top_node paired_up_invariants ([], []) ts
-              
-            in
-            
-            let inv' = 
-              List.map
-               (fun t ->
-                ("inv_"^(Numeral.string_of_numeral !count), t)
-                ) top_node_invariants_list in
-              
-            
-            verify_invariants ts inv';
-
-            (debug inv "The total number of invariant found =  %d" (List.length top_node_invariants_list) end);
-            List.iter
-            
-              (fun inv ->
-                
-                (*(debug inv "top node invariant = %s" (Term.string_of_term inv) end);*)
-                Event.invariant inv
-                
-              ) top_node_invariants_list
-           
-        );
-      
-      if ((List.length props_not_k_ind) <> 0 && (Numeral.gt ind_k !bmcK) ) then
-        
-        ( 
-          create_stable_graph 
-            bmc_solver 
-            ts
-            true
-            (Numeral.succ !bmcK) 
-            (subtract_list (mk_candidate_invariants ()) invariants)
-            false
-            []
-        );
-        
-      produce_invariants all_candidate_terms bmc_solver ind_solver ts  (Numeral.succ ind_k) (List.rev_append invariants props_k_ind) 
-      
-    )
-*)
+    start_inv_gen all_candidate_terms bmc_solver ind_solver ts (Numeral.succ k) (props_k_ind @ invariants)     
 
 
 (* Generate invariants from candidate terms*)
@@ -1280,6 +1160,8 @@ let inv_gen trans_sys =
           
          in
         
+        (debug inv "number of boolean candidate terms extracted = %d" (TTS.cardinal bool_term_set) end);
+        
          if ((TTS.cardinal bool_term_set) < 3) || (TTS.is_empty bool_term_set) then 
          
            accum 
@@ -1292,7 +1174,7 @@ let inv_gen trans_sys =
       [] 
       candidate_terms
     
-  in
+  in    
   
  (* List.iter
     (fun (trans_s, t) ->
@@ -1417,14 +1299,10 @@ let inv_gen trans_sys =
             
             let rep = pick_rep_term terms_list in
             
-            THT.add nodes_hashtl rep  (add_true_false_terms terms_list);
-            (debug inv "$$$$$$$$$$$$  initial graph rep = %s $$ " (Term.string_of_term rep) end);
+            THT.add nodes_hashtl rep  (add_true_false_terms terms_list);           
             
         ) bool_terms;
-      
-      (*Create a stable implication graph by BMC*)
-      (*create_stable_graph bmc_solver trans_sys true Numeral.zero (mk_candidate_invariants ()) false [];*)
-      
+           
       start_inv_gen candidate_terms bmc_solver ind_solver trans_sys Numeral.zero []
       
     )
@@ -1435,6 +1313,11 @@ let inv_gen trans_sys =
 
 (* Entry point *)
 let main trans_sys = 
+
+  Event.log L_info 
+      "Invgen generate complement %B" (Flags.invgen_bool_complement ());
+  
+  Stat.start_timer Stat.invgen_total_time;
   
   Event.set_module `INVGEN;
   

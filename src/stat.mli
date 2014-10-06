@@ -161,6 +161,30 @@ val ind_stats : stat_item list
 (** Print statistics for inductive step *)
 val pp_print_ind_stats : Format.formatter -> unit 
 
+
+(** {2 INVGEN} *)
+
+(** Highest k reached *)
+val invgen_k : int_item 
+
+(** The number of invariants discovered*)
+val invgen_num_invs : int_item
+
+(** Total time in BMC *)
+val invgen_total_time : float_item
+
+(** Stop and record all timers *)
+val invgen_stop_timers : unit -> unit 
+
+(** Title for BMC statistics *)
+val invgen_stats_title : string
+
+(** BMC statistics *)
+val invgen_stats : stat_item list
+
+(** Print statistics for BMC *)
+val pp_print_invgen_stats : Format.formatter -> unit 
+
 (** {2 PDR} *)
 
 (** Highest k reached *)
