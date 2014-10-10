@@ -1146,6 +1146,7 @@ let bump_state i term =
   T.map
     (function _ -> function 
        | t when is_free_var t -> 
+       (* (debug inv "bumping state for term...." end);*)
          mk_var 
            (Var.bump_offset_of_state_var_instance i
               (free_var_of_term t))

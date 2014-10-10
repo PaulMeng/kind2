@@ -700,7 +700,7 @@ let is_invariant invariants term =
 
 (* Make candidate invariants out of the graph*)
 let mk_candidate_invariants invariants =  
-  
+  (*(debug inv "$$$$$$$$$$$$$$$$$$$$ Making Candidate invariants $$$$$$$$$$$$$$$$$$$$$$$$$$$$$" end);*)
   (*Make candidate invariants from nodes*)
   let candidate_invariants =
     
@@ -708,6 +708,7 @@ let mk_candidate_invariants invariants =
     
       (fun rep term_list accum ->
         
+        (*(debug inv "*****  node size = %d" (List.length term_list) end);*)
 
         (List.fold_left
           (fun accum' t ->
@@ -725,7 +726,7 @@ let mk_candidate_invariants invariants =
               if not (is_invariant invariants eq_term) then
                 (
                   count := Numeral.succ !count;
-                  (*(debug inv "$$$$$$$$$$$$$$candidate invariant = %s" (Term.string_of_term (Term.mk_eq [rep; t])) end);*)
+                  (*(debug inv "*****  node candidate invariant = %s" (Term.string_of_term (Term.mk_eq [rep'; t])) end);*)
                   ("inv_"^(Numeral.string_of_numeral !count), eq_term)::accum'
                 )
                 
@@ -752,10 +753,10 @@ let mk_candidate_invariants invariants =
             
             let source' = if Term.is_named source then Term.term_of_named source else source in
             let t' = if Term.is_named t then Term.term_of_named t else t in
-            let inv = Term.mk_implies [source'; t'] in
-            
-            if not (is_invariant invariants inv) then
-              ("inv_"^(Numeral.string_of_numeral !count), inv)::accum'
+            let inv' = Term.mk_implies [source'; t'] in
+            (*(debug inv "*****  edge candidate invariant = %s" (Term.string_of_term inv') end);*)
+            if not (is_invariant invariants inv') then
+              ("inv_"^(Numeral.string_of_numeral !count), inv')::accum'
             else accum'
             )
             
@@ -766,6 +767,9 @@ let mk_candidate_invariants invariants =
         candidate_invariants
   in
   
+  
+  
+  (*(debug inv "$$$$$$$$$$$$$$$$$$$$ Making Candidate invariants end!!!! $$$$$$$$$$$$$$$$$$$$$$$$$$$$$" end);*)
   candidate_invariants'
 
 (* Compute the difference of two lists*)
@@ -828,9 +832,6 @@ let remove_trivial_invariants invariants =
 
     ) invariants
 
-
-
-(*Recursively instantiate up to the top node*)
 (* Instantiate subnode invariants up to the top node*)
 let rec instantiate_invariant_upto_top_node paired_up_invariants accum ts =
   
@@ -978,21 +979,18 @@ let verify_invariants trans_sys invariants =
       
     in            
     
-    if not (props_invalid = []) then
+    if not (props_invalid = []) || not (props_invalid' = []) then
       (
         quit_loop := true;
         
-        (debug inv "!!!!!!!!!!!!!!!!!!!! Caught some false invariant!" end);
+        (debug inv "!!!!!!!!!!!!!!!!!!!! Caught some false invariants! at k = %d" (Numeral.to_int (!k)) end);
+        
         
         List.iter
-          (fun (cex, false_inv) ->
-            List.iter
-              (fun (name, inv) ->
-                (debug inv "False invariant = %s" (Term.string_of_term inv) end);
-                )
-              false_inv;
-          )
-          props_invalid;
+          (fun (name, inv) ->
+            (debug inv "False invariant = %s" (Term.string_of_term inv) end);
+            )
+          (List.rev_append props_invalid' (List.concat (List.map snd props_invalid)));
       );
     
     
@@ -1005,6 +1003,8 @@ let verify_invariants trans_sys invariants =
       
     
   done
+  
+  
 
 (*Call BMC to refine implication graph*)
 let rec refine_bmc_step solver ts new_step k candidate_invs refined global_invariants =
@@ -1093,7 +1093,7 @@ let send_out_invariants ts all_candidate_terms invariants =
     
     List.iter
       (fun inv ->
-        (*(debug inv "top node invariant = %s" (Term.string_of_term inv) end);*)
+        (*(debug inv "%s" (Term.string_of_term (Term.eval_t (fun ft _ -> Term.construct ft) inv)) end);*)
         Event.invariant inv
                 
       )
