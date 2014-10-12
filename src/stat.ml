@@ -307,7 +307,7 @@ let pp_print_ind_stats ppf =
 (* ********** INVGEN statistics ********** *)
 
 let invgen_k = 
-  empty_item "k" 0
+  empty_item "Invgen_k" 0
   
 let invgen_num_invs = 
   empty_item "Number of invariants" 0
