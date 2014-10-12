@@ -89,7 +89,13 @@ let assert_upto_k solver k term =
    queries, since it will be subsumed by the current query.
 *)
 
-let rec bmc_step_round solver trans_sys k props_kfalse properties = 
+let rec bmc_step_round solver trans_sys k props_kfalse properties all_vars= 
+  (*
+    List.iter
+    (fun (name, inv) ->
+      (debug inv "~~~ potential invariant: %s" (Term.string_of_term inv) end);
+    )
+    properties;*)
   
   (* Assert negated properties ~(P_1[x_k] & ... & P_n[x_k]) *)
   S.assert_term solver
@@ -115,8 +121,27 @@ let rec bmc_step_round solver trans_sys k props_kfalse properties =
     (
 
       (* Definitions of predicates *)
-      let uf_defs = TransSys.uf_defs trans_sys in
-
+      let uf_defs = TransSys.uf_defs trans_sys in      
+      
+      (*(*Variables in properties at step k *)
+      let p_k_vars = 
+        
+        List.fold_left       
+          (fun accum (_, (var_list, _)) ->
+            accum
+            @
+            (List.map
+              (fun var ->
+                Var.bump_offset_of_state_var_instance k var
+              )              
+              var_list)        
+          ) 
+          []
+          uf_defs
+      in*)
+   
+      
+      
       (* Variables in properties at step k *)
       let p_k_vars = 
         
@@ -128,11 +153,13 @@ let rec bmc_step_round solver trans_sys k props_kfalse properties =
             
             List.rev_append (Var.VarSet.elements (Term.vars_of_term p_k)) accum
             
-          ) [] properties
+          ) 
+          [] 
+          properties
       in
       
      (* Model for variables of properties at step k *)
-     let p_k_model = 
+     let k_model = 
       
       if (List.length p_k_vars) = 0 then
         []
@@ -140,7 +167,16 @@ let rec bmc_step_round solver trans_sys k props_kfalse properties =
         S.get_model solver p_k_vars 
     
      in
-
+    
+     let model = 
+      
+      if (List.length all_vars) = 0 then
+        []
+      else 
+        S.get_model solver all_vars 
+    
+     in
+   
       (* Which properties are false in k steps? *)
       let props_unknown, props_kfalse' = 
 
@@ -152,7 +188,7 @@ let rec bmc_step_round solver trans_sys k props_kfalse properties =
              let p_k = Term.bump_state k p in
 
              (* Distinguish properties by truth value at step k *)
-             Eval.bool_of_value (Eval.eval_term uf_defs p_k_model p_k)) 
+             Eval.bool_of_value (Eval.eval_term uf_defs k_model p_k)) 
           properties
 
       in
@@ -172,14 +208,14 @@ let rec bmc_step_round solver trans_sys k props_kfalse properties =
           S.pop solver;
 
           (* All remaining properties are false in k steps *)
-          (props_unknown, props_kfalse'', p_k_model)
+          (props_unknown, props_kfalse'', model)
 
         )
 
       else
         
         (* Continue with properties that may be true *)
-        (props_unknown, props_kfalse'', p_k_model)
+        (props_unknown, props_kfalse'', model)
 
       
 
@@ -205,7 +241,7 @@ let rec bmc_step_round solver trans_sys k props_kfalse properties =
 
 let rec bmc_step_loop solver trans_sys k props_kfalse properties = 
 
-  (* Continue with properties that may be true *)
+  
   let (props_unknown', props_kfalse', _) =
     
     bmc_step_round 
@@ -214,9 +250,11 @@ let rec bmc_step_loop solver trans_sys k props_kfalse properties =
       k
       props_kfalse
       properties
+      []
       
   in
   
+  (* Continue with properties that may be true *)
   if not (props_unknown' = [] ||  props_kfalse' = []) then
     
     bmc_step_loop
@@ -253,7 +291,7 @@ let bmc_setup_context check_ts_props solver trans_sys k properties =
 
   (* Checking properties of the transition system? *)
   let properties' = if check_ts_props then
-
+      
       (* Filter out proved or disproved properties by other modules *)
       List.filter
         (fun (p, _) -> 
@@ -299,7 +337,7 @@ let bmc_setup_context check_ts_props solver trans_sys k properties =
   
   
 (*Bmc for invariant generation*)
-let bmc_invgen_step check_ts_props solver trans_sys new_step k properties invariants =
+let bmc_invgen_step check_ts_props solver trans_sys new_step k properties invariants all_vars =
   
   if new_step then
     (
@@ -311,7 +349,6 @@ let bmc_invgen_step check_ts_props solver trans_sys new_step k properties invari
       
       ()
     );
-   
     
   let k_minus_one = Numeral.pred k in
   (* Receive queued messages 
@@ -330,10 +367,19 @@ let bmc_invgen_step check_ts_props solver trans_sys new_step k properties invari
   List.iter 
     (fun (_, t) -> assert_upto_k solver k_minus_one t) 
       invariants_recvd;
+      
+  let k_vars = 
+    List.map
+      (fun var ->
+        Var.bump_offset_of_state_var_instance k var
+      )
+      all_vars
+  in
   
+  (*Call BMC step to check the invariants*)
   let props_valid, props_invalid, model = 
     
-    bmc_step_round solver trans_sys k [] properties
+    bmc_step_round solver trans_sys k [] properties k_vars
     
   in
     
@@ -358,7 +404,7 @@ let bmc_step check_ts_props solver trans_sys k properties =
 
   (* Check which properties are true in step k *)
   let (props_unknown, props_kfalse, _) = 
-    bmc_step_round solver trans_sys k [] properties'
+    bmc_step_round solver trans_sys k [] properties' []
   in
   
   (props_unknown, props_kfalse)

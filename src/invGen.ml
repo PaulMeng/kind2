@@ -172,8 +172,7 @@ let rec collect_subterms ts calling_node_symbol (fterm:Term.T.flat) (acc:((Type.
         
     in  
 
-    let t = Term.construct app in    
-    
+    let t = Term.construct app in        
     let t_type = Term.type_of_term t in
     
     let f_list = 
@@ -283,8 +282,6 @@ let rec termset_of_list = function
 
 (** Extract canddiate terms from uf_defs*)
 let extract_candidate_terms ts =
-  
-  let uf_defs = TransSys.uf_defs ts in
       
   (*Extract subterms for both init and trans state of a node*)    
   let term_sets_list =
@@ -630,12 +627,20 @@ let rebuild_graph uf_defs model k =
     THT.fold
     
       (fun rep term_list accum ->
-          
+        
+    (*    
+        List.iter
+          (fun (var, value) ->
+            
+            (debug inv "%s = %s" (Var.string_of_var var) (Term.string_of_term value) end);
+          )
+          model;*)
+        (*Split a node into two nodes based on their value*)  
         let (t_list_1, t_list_0) =
           
           List.partition
             (fun t ->
-             (* (debug inv "repo term = %s " (Term.string_of_term t) end);*)
+              (*(debug inv "--------- rep term = %s " (Term.string_of_term t) end);*)
               Eval.bool_of_value
                 (Eval.eval_term uf_defs model (Term.bump_state k t))
             ) term_list
@@ -700,7 +705,7 @@ let is_invariant invariants term =
 
 (* Make candidate invariants out of the graph*)
 let mk_candidate_invariants invariants =  
-  (*(debug inv "$$$$$$$$$$$$$$$$$$$$ Making Candidate invariants $$$$$$$$$$$$$$$$$$$$$$$$$$$$$" end);*)
+  (*(debug inv "$$$$$$$$$$$$$$$$$$$$  $$$$$$$$$$$$$$$$$$$$$$$$$$$$$" end);*)
   (*Make candidate invariants from nodes*)
   let candidate_invariants =
     
@@ -708,7 +713,7 @@ let mk_candidate_invariants invariants =
     
       (fun rep term_list accum ->
         
-        (*(debug inv "*****  node size = %d" (List.length term_list) end);*)
+      (*  (debug inv "*****  node size = %d" (List.length term_list) end);*)
 
         (List.fold_left
           (fun accum' t ->
@@ -769,7 +774,7 @@ let mk_candidate_invariants invariants =
   
   
   
-  (*(debug inv "$$$$$$$$$$$$$$$$$$$$ Making Candidate invariants end!!!! $$$$$$$$$$$$$$$$$$$$$$$$$$$$$" end);*)
+  
   candidate_invariants'
 
 (* Compute the difference of two lists*)
@@ -808,7 +813,7 @@ let add_true_false_terms bool_terms_list =
     t_list
 
     
-(*Remove trivial invariants such as "true", "false -> bla", "a = a", no vars term and etc*)
+(*Remove trivial invariants such as "true","bla -> true", "false -> bla", "a = a", no vars term and etc*)
 let remove_trivial_invariants invariants =
 
   List.filter
@@ -818,7 +823,10 @@ let remove_trivial_invariants invariants =
       (        
         (Term.node_symbol_of_term inv == Symbol.s_implies
         &&
-        Term.equal Term.t_false (List.hd (Term.node_args_of_term inv))
+        (Term.equal Term.t_false (List.hd (Term.node_args_of_term inv))
+         ||
+         Term.equal Term.t_true (List.nth (Term.node_args_of_term inv) 1)
+        )
         )      
       ||
         (Term.vars_of_term inv = Var.VarSet.empty)
@@ -912,7 +920,31 @@ let rec instantiate_invariant_upto_top_node paired_up_invariants accum ts =
 (*Verify invariants*)
 let verify_invariants trans_sys invariants =
   
-  (* Determine logic for the SMT solver *)
+  let uf_defs = TransSys.uf_defs trans_sys in
+  
+  let ufsymbol_var_list =
+    
+    List.map
+      ( fun (s, (vars, terms)) ->
+          List.map 
+            (fun var ->
+              StateVar.uf_symbol_of_state_var (Var.state_var_of_state_var_instance var)
+            ) vars
+             
+      ) uf_defs
+  in
+  
+  let ufsymbol_set = 
+    List.fold_left
+      ( fun empty_set elt ->
+          UfSymbol.UfSymbolSet.add 
+            elt
+            empty_set
+        )
+      UfSymbol.UfSymbolSet.empty (List.flatten ufsymbol_var_list)
+  in
+  
+    (* Determine logic for the SMT solver *)
   let logic = TransSys.get_logic trans_sys in
   
   (* Create BMC solver instance *)
@@ -924,6 +956,15 @@ let verify_invariants trans_sys invariants =
   TransSys.iter_state_var_declarations
     trans_sys
     (Bmc.S.declare_fun bmc_solver);
+  
+  (*declare subnodes uninterpreted function symbol for BMC*)
+  UfSymbol.UfSymbolSet.iter
+    ( fun ufsymbol ->
+      
+       Bmc.S.declare_fun bmc_solver ufsymbol
+      
+      ) ufsymbol_set;
+    
   
   (* Define functions *)
   TransSys.iter_uf_definitions
@@ -942,7 +983,17 @@ let verify_invariants trans_sys invariants =
   TransSys.iter_state_var_declarations
     trans_sys
     (IndStep.S.declare_fun ind_solver);
-
+    
+  Compress.init (IndStep.S.declare_fun ind_solver) trans_sys;
+  
+  (*declare subnodes uninterpreted function symbol for IND*)  
+  UfSymbol.UfSymbolSet.iter
+    ( fun ufsymbol ->
+      
+       IndStep.S.declare_fun ind_solver ufsymbol
+       
+      ) ufsymbol_set;
+  
   (* Define functions *)
   TransSys.iter_uf_definitions
     trans_sys
@@ -954,8 +1005,18 @@ let verify_invariants trans_sys invariants =
   IndStep.S.assert_term
     ind_solver
     (TransSys.invars_of_bound trans_sys Numeral.zero);
+  
+  (* Assert initial and transsys terms of all nodes*)  
+  List.iter
+    (fun ((_, (_, init_term)), (_, (_, trans_term))) ->
+      
+      Bmc.S.assert_term bmc_solver init_term;
+      
+      IndStep.S.assert_term ind_solver trans_term;
+      
+    )
+    (TransSys.uf_defs_pairs trans_sys);
 
-  (* New context for assertions to be removed on restart *)
   IndStep.S.push ind_solver;
   
   let k = ref (Numeral.pred Numeral.zero) in
@@ -966,6 +1027,8 @@ let verify_invariants trans_sys invariants =
   while not !quit_loop do
     
     k := Numeral.succ !k;
+    
+    (debug inv "verifying properties k = %d" (Numeral.to_int !k) end);
    
     let props_valid, props_invalid =
       
@@ -1003,19 +1066,19 @@ let verify_invariants trans_sys invariants =
       
     
   done
-  
+
   
 
 (*Call BMC to refine implication graph*)
-let rec refine_bmc_step solver ts new_step k candidate_invs refined global_invariants =
+let rec refine_bmc_step solver ts new_step k candidate_invs refined global_invariants all_vars =
   
   (* Call BMC until no properties disproved at current step*)
   let (props_unknown, props_invalid, model, invariants_recvd) = 
     
-    Bmc.bmc_invgen_step false solver ts new_step k candidate_invs global_invariants
+    Bmc.bmc_invgen_step false solver ts new_step k candidate_invs global_invariants all_vars
     
   in
-  
+  (*(debug inv "current bmc k = %d" (Numeral.to_int k) end);*)
   (*rebuild the graph if some candidate invariants are disproved by BMC*)
   if not (props_invalid = []) then
     
@@ -1024,8 +1087,45 @@ let rec refine_bmc_step solver ts new_step k candidate_invs refined global_invar
     
       rebuild_graph uf_defs model k;
         
-      refine_bmc_step solver ts false k (mk_candidate_invariants global_invariants) false (invariants_recvd @ global_invariants);
+      refine_bmc_step solver ts false k (mk_candidate_invariants global_invariants) false (invariants_recvd @ global_invariants) all_vars
     )
+  else
+    (
+      (* Assert transsys terms of all nodes*)  
+      List.iter
+        (fun (_, (_, (_, trans_term))) ->
+                    
+          Bmc.S.assert_term solver (Term.bump_state k trans_term);
+          
+        )
+        (TransSys.uf_defs_pairs ts);
+      
+    )
+    
+(*run induction to check the invariance of candidate terms*)
+let refine_ind_step ind_solver ts props_kfalse candidate_invariants k =
+  
+  (*Call induction step to prove invariance of candidate terms*)
+  let props_kind, props_not_kind =
+    
+    IndStep.ind_step 
+          ind_solver 
+          ts 
+          []   
+          candidate_invariants
+          k
+  in
+  
+  (* Assert transsys terms of all nodes*)  
+  List.iter
+    (fun (_, (_, (_, trans_term))) ->
+                
+      IndStep.S.assert_term ind_solver (Term.bump_state (Numeral.succ k) trans_term);
+      
+    )
+    (TransSys.uf_defs_pairs ts);
+    
+  (props_kind, props_not_kind)
 
 (* Instantiate invariants upto top node and send out them*)
 let send_out_invariants ts all_candidate_terms invariants =
@@ -1038,7 +1138,6 @@ let send_out_invariants ts all_candidate_terms invariants =
       (fun accum (_, term) ->
                 
         let var =
-           
           List.hd (Var.VarSet.elements (Term.vars_of_term term)) 
                     
         in
@@ -1070,12 +1169,14 @@ let send_out_invariants ts all_candidate_terms invariants =
               
     in 
     
+    (* Instantiate subnodes' invariants upto very top node*)
     let top_node_invariants_list, subnode_invariant_list = 
       
       instantiate_invariant_upto_top_node paired_up_invariants ([], []) ts
       
     in
-            
+    
+    (*Pair up invariants with names to verify them *)                
     let inv' =
       
       List.map
@@ -1085,22 +1186,25 @@ let send_out_invariants ts all_candidate_terms invariants =
         top_node_invariants_list
     in
     
-    verify_invariants ts inv';
+    (*verify_invariants ts inv';*)
     
-    Stat.set (List.length top_node_invariants_list) Stat.invgen_num_invs;
+    (*Set number of invariants statistics*)
+    Stat.set ((List.length top_node_invariants_list) + (Stat.get Stat.invgen_num_invs)) Stat.invgen_num_invs;
    
-    (debug inv "The total number of invariant found =  %d" (List.length top_node_invariants_list) end);
+   (* (debug inv "The total number of invariant found =  %d" (List.length top_node_invariants_list) end);*)
     
+    (*Send out top node invariants*)
     List.iter
       (fun inv ->
-        (*(debug inv "%s" (Term.string_of_term (Term.eval_t (fun ft _ -> Term.construct ft) inv)) end);*)
+        (debug inv "%s" (Term.string_of_term (Term.eval_t (fun ft _ -> Term.construct ft) inv)) end);
         Event.invariant inv
                 
       )
       top_node_invariants_list
   
-
-let rec start_inv_gen all_candidate_terms bmc_solver ind_solver ts k invariants =
+(*Start invariants generation process*)
+let rec start_inv_gen all_candidate_terms bmc_solver ind_solver ts k invariants all_vars=
+      
   
   let candidate_invariants = mk_candidate_invariants invariants in
   
@@ -1114,6 +1218,7 @@ let rec start_inv_gen all_candidate_terms bmc_solver ind_solver ts k invariants 
     
     Stat.update_time Stat.invgen_total_time;
     
+    (*Call BMC to refind implication graph*)
     refine_bmc_step 
       bmc_solver 
       ts
@@ -1121,11 +1226,13 @@ let rec start_inv_gen all_candidate_terms bmc_solver ind_solver ts k invariants 
       k 
       candidate_invariants
       false
-      [];
-
+      []
+      all_vars;
+      
+    (* Call IND to prove invarance of candidates*)
     let props_k_ind, props_not_k_ind = 
       
-      IndStep.ind_step 
+      refine_ind_step 
         ind_solver 
         ts 
         [] 
@@ -1136,7 +1243,8 @@ let rec start_inv_gen all_candidate_terms bmc_solver ind_solver ts k invariants 
     
     send_out_invariants ts all_candidate_terms (remove_trivial_invariants props_k_ind);
     
-    start_inv_gen all_candidate_terms bmc_solver ind_solver ts (Numeral.succ k) (props_k_ind @ invariants)     
+    (*Start inv_gen with remaining candidates*)
+    start_inv_gen all_candidate_terms bmc_solver ind_solver ts (Numeral.succ k) (props_k_ind @ invariants) all_vars 
 
 
 (* Generate invariants from candidate terms*)
@@ -1144,7 +1252,7 @@ let inv_gen trans_sys =
   
   (*Extract candidate terms from transition system*)
   let candidate_terms = extract_candidate_terms trans_sys in
-  (debug inv "Finish extracting terms!" end);
+ 
   let bool_terms =
     
     List.fold_left
@@ -1159,8 +1267,6 @@ let inv_gen trans_sys =
            with Not_found -> TTS.empty
           
          in
-        
-        (debug inv "number of boolean candidate terms extracted = %d" (TTS.cardinal bool_term_set) end);
         
          if ((TTS.cardinal bool_term_set) < 3) || (TTS.is_empty bool_term_set) then 
          
@@ -1204,9 +1310,10 @@ let inv_gen trans_sys =
        ) t
   ) bool_terms;*)
   
-  (debug inv "After bool_terms!" end);
+  
   let uf_defs = TransSys.uf_defs trans_sys in
   
+  (*Create uf_symbol for variables in each node*)
   let ufsymbol_var_list =
     
     List.map
@@ -1219,6 +1326,7 @@ let inv_gen trans_sys =
       ) uf_defs
   in
   
+  (*Remove redundant variables*)
   let ufsymbol_set = 
     List.fold_left
       ( fun empty_set elt ->
@@ -1226,7 +1334,8 @@ let inv_gen trans_sys =
             elt
             empty_set
         )
-      UfSymbol.UfSymbolSet.empty (List.flatten ufsymbol_var_list)
+      UfSymbol.UfSymbolSet.empty
+      (List.flatten ufsymbol_var_list)
   in
     
   
@@ -1267,6 +1376,9 @@ let inv_gen trans_sys =
     trans_sys
     (IndStep.S.declare_fun ind_solver);
     
+  Compress.init (IndStep.S.declare_fun ind_solver) trans_sys;
+  
+  (*Declare ufsymbols of variables*)  
   UfSymbol.UfSymbolSet.iter
     ( fun ufsymbol ->
        IndStep.S.declare_fun ind_solver ufsymbol
@@ -1283,27 +1395,58 @@ let inv_gen trans_sys =
   IndStep.S.assert_term
     ind_solver
     (TransSys.invars_of_bound trans_sys Numeral.zero);
+  
+  (* Assert initial and transsys terms of all nodes*)  
+  List.iter
+    (fun ((_, (_, init_term)), (_, (_, trans_term))) ->
+      
+      Bmc.S.assert_term bmc_solver init_term;
+      
+      IndStep.S.assert_term ind_solver trans_term;
+      
+    )
+    (TransSys.uf_defs_pairs trans_sys);
 
-  (* New context for assertions to be removed on restart *)
   IndStep.S.push ind_solver;
     
   if not (bool_terms = []) then
     
     (
-      List.iter
-        (fun (_, terms_set) ->
-          
-          if not (TTS.is_empty terms_set) then
-            (*Use Set.choose*)
-            let terms_list = TTS.elements terms_set in
+      (*Get all variables in the candidate boolean terms to get a whole model in order to split the graph*)
+      let all_vars =
+      
+        List.fold_left
+          (fun accum (_, terms_set) ->
             
-            let rep = pick_rep_term terms_list in
-            
-            THT.add nodes_hashtl rep  (add_true_false_terms terms_list);           
-            
-        ) bool_terms;
+            if not (TTS.is_empty terms_set) then
+              (
+                (*Use Set.choose*)
+                let terms_list = TTS.elements terms_set in
+                
+                let rep = pick_rep_term terms_list in
+                
+                THT.add nodes_hashtl rep  (add_true_false_terms terms_list); 
+                (accum
+                 @
+                 (Var.VarSet.elements 
+                 (List.fold_left
+                   (fun accum' term ->
+                     Var.VarSet.union accum' (Term.vars_of_term term)
+                   )
+                   Var.VarSet.empty
+                   terms_list))
+                )
+              ) 
+            else
+              accum         
+              
+          ) 
+          [] 
+          bool_terms
+      in
+        
            
-      start_inv_gen candidate_terms bmc_solver ind_solver trans_sys Numeral.zero []
+      start_inv_gen candidate_terms bmc_solver ind_solver trans_sys Numeral.zero [] all_vars
       
     )
     
