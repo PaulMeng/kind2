@@ -1124,6 +1124,9 @@ let refine_ind_step ind_solver ts props_kfalse candidate_invariants k =
       
     )
     (TransSys.uf_defs_pairs ts);
+  
+  (*Push transition relation before entailment checking*)
+  (*IndStep.S.push ind_solver;*)
     
   (props_kind, props_not_kind)
 

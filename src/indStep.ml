@@ -85,7 +85,7 @@ let partition_props solver props k =
        
        (* Property at instant k *)
        let t_k = Term.bump_state k p in
-
+            
        (* Get value of property term *)
        match S.get_values solver [t_k] with
          | [(t, v)] when v == Term.t_true && t == t_k -> true

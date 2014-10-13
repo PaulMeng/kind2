@@ -342,12 +342,14 @@ let bmc_invgen_step check_ts_props solver trans_sys new_step k properties invari
   if new_step then
     (
       
+      
       (*set up bmc context for a new step*)
       let _ = 
         bmc_setup_context check_ts_props solver trans_sys k properties
       in 
       
-      ()
+      S.push solver;
+      
     );
     
   let k_minus_one = Numeral.pred k in
