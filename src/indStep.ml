@@ -102,7 +102,8 @@ let rec ind_step_loop
     props_not_k_ind
     props_unknown 
     k_plus_one =
-
+      
+  S.push solver;
   (* Receive queued messages 
 
      Side effect: Terminate when ControlMessage TERM is received.*)
@@ -117,9 +118,17 @@ let rec ind_step_loop
   List.iter
     (fun (_, t) -> assert_upto_k solver k_plus_one t) 
     invariants_recvd;
+    
 
   (* Conjunction of unknown properties *)
   let props_unknown_term = Term.mk_and (List.map snd props_unknown) in
+  
+ (* Assert unknown and tentatively inductive properties P[x_k] *)
+  
+  assert_upto_k
+    solver
+    (Numeral.pred k_plus_one)
+    props_unknown_term;
 
   (* Assert negation of unknown properties P[x_k+1] *)
   S.assert_term
@@ -206,15 +215,17 @@ let rec ind_step_loop
 
             else
 
-              (Event.log
+              (
+               (*Event.log
                  L_info
                  "Properties %a not %a-inductive"
                  (pp_print_list 
-                    (fun ppf (n, _) -> Format.fprintf ppf "%s" n)
+                    (fun ppf (n, t) -> Format.fprintf ppf "%s" n)
                     ",@ ")
                  props_not_k_ind'
-                 Numeral.pp_print_numeral (Numeral.pred k_plus_one);
-
+                 Numeral.pp_print_numeral (Numeral.pred k_plus_one);*)
+               S.pop solver;
+              
                (* Recurse to test unknown properties for k-inductiveness *)
                ind_step_loop 
                  solver
@@ -253,14 +264,14 @@ let rec ind_step_loop
 
     (
 
-      Event.log
+      (*Event.log
         L_info
         "Properties %a maybe %a-inductive"
         (pp_print_list 
            (fun ppf (n, _) -> Format.fprintf ppf "%s" n)
            ",@ ")
         props_unknown
-        Numeral.pp_print_numeral (Numeral.pred k_plus_one);
+        Numeral.pp_print_numeral (Numeral.pred k_plus_one);*)
 
       (* Pop assertions from entailment checks *)
       S.pop solver;
@@ -269,14 +280,14 @@ let rec ind_step_loop
       List.iter
         (fun (_, t) -> assert_upto_k solver k_plus_one t) 
         invariants_recvd;
-
+(*
       (* Assert tentatively k-inductive properties P[x_k+1] *)
       S.assert_term
         solver
         (Term.bump_state
            k_plus_one
            (Term.mk_and (List.map snd props_unknown)));
-
+*)
       (* Found some properties k-inductive *)
       (props_k_ind @ props_unknown, props_not_k_ind)
 
@@ -331,14 +342,6 @@ let ind_step
        k_plus_one
        (Term.mk_and (List.map snd props_k_ind)));
 
-  (* Assert unknown and tentatively inductive properties P[x_k] *)
-  S.assert_term
-    solver
-    (Term.bump_state k props_term);
-
-  (* Push context before entailment checks *)
-  S.push solver;
-
   ind_step_loop 
     solver
     trans_sys
@@ -348,6 +351,77 @@ let ind_step
     k_plus_one 
 
 
+let rec invgen_loop solver trans_sys props_k_ind props_unknown props_not_k_ind k =
+  
+  (*Push context before adding temporary context for real k-inductive checking*)
+  S.push solver;
+  
+  (* Increment k *)
+  let k_plus_one = Numeral.succ k in
+  
+  (* Conjunction of maybe k-inductive properties *)
+  let props_term = 
+    Term.mk_and
+      (List.map snd props_unknown)
+  in
+
+  (* Assert maybe k inductive properties P[x_k] *)
+  S.assert_term
+    solver
+    (Term.bump_state k props_term);
+  
+  let props_maybe_k_inductive, props_not_k_inductive =
+  
+    ind_step_loop 
+      solver
+      trans_sys
+      props_k_ind
+      []
+      props_unknown 
+      k_plus_one
+  in
+  
+  if not (props_not_k_inductive = []) && not (props_maybe_k_inductive = []) then
+    (
+    
+      invgen_loop solver trans_sys props_k_ind props_maybe_k_inductive (props_not_k_ind @ props_maybe_k_inductive) k
+      
+    )
+    
+    
+  
+  else
+    (
+      
+      (props_maybe_k_inductive, (props_not_k_ind@props_not_k_inductive))
+    )
+    
+  
+      
+
+
+
+let rec invgen_ind_step solver trans_sys props_k_ind props_unknown k =
+  
+  let props_maybe_kind, props_not_kind =
+    ind_step 
+      solver
+      trans_sys
+      props_k_ind
+      props_unknown 
+      k
+  in
+  
+  (*Check inductiveness of maybe k-inductive props*)
+  if not (props_not_kind = []) then
+    
+    invgen_loop solver trans_sys props_k_ind props_maybe_kind props_not_kind k
+    
+  else
+    
+    props_maybe_kind, props_not_kind
+  
+  
 
 let rec induction solver trans_sys props_k_ind props_unknown k =
 

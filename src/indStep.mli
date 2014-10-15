@@ -39,6 +39,7 @@ module S : SolverMethods.S
     k-inductive. *)
 val ind_step : S.t -> TransSys.t -> (string * Term.t) list -> (string * Term.t) list -> Numeral.t -> (string * Term.t) list * (string * Term.t) list
 
+val invgen_ind_step : S.t -> TransSys.t -> (string * Term.t) list -> (string * Term.t) list -> Numeral.t -> (string * Term.t) list * (string * Term.t) list
 
 (** Entry point *)
 val main : TransSys.t -> unit

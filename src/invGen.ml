@@ -922,7 +922,7 @@ let verify_invariants trans_sys invariants =
   
   let uf_defs = TransSys.uf_defs trans_sys in
   
-  let ufsymbol_var_list =
+  (*let ufsymbol_var_list =
     
     List.map
       ( fun (s, (vars, terms)) ->
@@ -942,7 +942,7 @@ let verify_invariants trans_sys invariants =
             empty_set
         )
       UfSymbol.UfSymbolSet.empty (List.flatten ufsymbol_var_list)
-  in
+  in*)
   
     (* Determine logic for the SMT solver *)
   let logic = TransSys.get_logic trans_sys in
@@ -956,14 +956,12 @@ let verify_invariants trans_sys invariants =
   TransSys.iter_state_var_declarations
     trans_sys
     (Bmc.S.declare_fun bmc_solver);
-  
+  (*
   (*declare subnodes uninterpreted function symbol for BMC*)
   UfSymbol.UfSymbolSet.iter
-    ( fun ufsymbol ->
-      
-       Bmc.S.declare_fun bmc_solver ufsymbol
-      
-      ) ufsymbol_set;
+    (fun ufsymbol ->
+       Bmc.S.declare_fun bmc_solver ufsymbol)
+    ufsymbol_set;*)
     
   
   (* Define functions *)
@@ -985,7 +983,7 @@ let verify_invariants trans_sys invariants =
     (IndStep.S.declare_fun ind_solver);
     
   Compress.init (IndStep.S.declare_fun ind_solver) trans_sys;
-  
+  (*
   (*declare subnodes uninterpreted function symbol for IND*)  
   UfSymbol.UfSymbolSet.iter
     ( fun ufsymbol ->
@@ -994,7 +992,7 @@ let verify_invariants trans_sys invariants =
        
       ) ufsymbol_set;
   
-  (* Define functions *)
+  (* Define functions *)*)
   TransSys.iter_uf_definitions
     trans_sys
     (IndStep.S.define_fun ind_solver);
@@ -1006,29 +1004,28 @@ let verify_invariants trans_sys invariants =
     ind_solver
     (TransSys.invars_of_bound trans_sys Numeral.zero);
   
-  (* Assert initial and transsys terms of all nodes*)  
+  (*(* Assert initial and transsys terms of all nodes*)  
   List.iter
     (fun ((_, (_, init_term)), (_, (_, trans_term))) ->
       
       Bmc.S.assert_term bmc_solver init_term;
+      Bmc.S.assert_term bmc_solver trans_term;
       
       IndStep.S.assert_term ind_solver trans_term;
       
     )
-    (TransSys.uf_defs_pairs trans_sys);
+    (TransSys.uf_defs_pairs trans_sys);*)
+  let k = ref (Numeral.pred Numeral.zero) in
 
   IndStep.S.push ind_solver;
-  
-  let k = ref (Numeral.pred Numeral.zero) in
+
 
   let quit_loop = ref false in
   
   (* Enter the bmc ind verifying loop *)
   while not !quit_loop do
     
-    k := Numeral.succ !k;
-    
-    (debug inv "verifying properties k = %d" (Numeral.to_int !k) end);
+    k := (Numeral.succ !k);
    
     let props_valid, props_invalid =
       
@@ -1042,11 +1039,11 @@ let verify_invariants trans_sys invariants =
       
     in            
     
-    if not (props_invalid = []) || not (props_invalid' = []) then
+    if not (props_invalid = []) then
       (
         quit_loop := true;
         
-        (debug inv "!!!!!!!!!!!!!!!!!!!! Caught some false invariants! at k = %d" (Numeral.to_int (!k)) end);
+        (debug inv "!!!!!!!!!!!!!!!!!!!! Caught some false invariants! at k = %d" (Numeral.to_int !k) end);
         
         
         List.iter
@@ -1054,17 +1051,15 @@ let verify_invariants trans_sys invariants =
             (debug inv "False invariant = %s" (Term.string_of_term inv) end);
             )
           (List.rev_append props_invalid' (List.concat (List.map snd props_invalid)));
-      );
-    
-    
-    if props_invalid = [] && props_invalid' = [] then
+      )
+    else if (props_invalid = [] && props_invalid' = []) then
       (
         quit_loop := true;
         
         (debug inv "~~~~~~~~~ All invariants are true invariants!" end); 
       )
-      
     
+
   done
 
   
@@ -1078,7 +1073,8 @@ let rec refine_bmc_step solver ts new_step k candidate_invs refined global_invar
     Bmc.bmc_invgen_step false solver ts new_step k candidate_invs global_invariants all_vars
     
   in
-  (*(debug inv "current bmc k = %d" (Numeral.to_int k) end);*)
+ 
+  
   (*rebuild the graph if some candidate invariants are disproved by BMC*)
   if not (props_invalid = []) then
     
@@ -1108,7 +1104,7 @@ let refine_ind_step ind_solver ts props_kfalse candidate_invariants k =
   (*Call induction step to prove invariance of candidate terms*)
   let props_kind, props_not_kind =
     
-    IndStep.ind_step 
+    IndStep.invgen_ind_step 
           ind_solver 
           ts 
           []   
@@ -1126,7 +1122,7 @@ let refine_ind_step ind_solver ts props_kfalse candidate_invariants k =
     (TransSys.uf_defs_pairs ts);
   
   (*Push transition relation before entailment checking*)
-  (*IndStep.S.push ind_solver;*)
+  IndStep.S.push ind_solver;
     
   (props_kind, props_not_kind)
 
@@ -1172,7 +1168,7 @@ let send_out_invariants ts all_candidate_terms invariants =
               
     in 
     
-    (* Instantiate subnodes' invariants upto very top node*)
+    (* Instantiate subnodes' invariants to very top node*)
     let top_node_invariants_list, subnode_invariant_list = 
       
       instantiate_invariant_upto_top_node paired_up_invariants ([], []) ts
@@ -1189,7 +1185,7 @@ let send_out_invariants ts all_candidate_terms invariants =
         top_node_invariants_list
     in
     
-    (*verify_invariants ts inv';*)
+    verify_invariants ts inv';
     
     (*Set number of invariants statistics*)
     Stat.set ((List.length top_node_invariants_list) + (Stat.get Stat.invgen_num_invs)) Stat.invgen_num_invs;
@@ -1199,7 +1195,7 @@ let send_out_invariants ts all_candidate_terms invariants =
     (*Send out top node invariants*)
     List.iter
       (fun inv ->
-        (debug inv "%s" (Term.string_of_term (Term.eval_t (fun ft _ -> Term.construct ft) inv)) end);
+        (*(debug inv "%s" (Term.string_of_term (Term.eval_t (fun ft _ -> Term.construct ft) inv)) end);*)
         Event.invariant inv
                 
       )
@@ -1459,9 +1455,6 @@ let inv_gen trans_sys =
 
 (* Entry point *)
 let main trans_sys = 
-
-  Event.log L_info 
-      "Invgen generate complement %B" (Flags.invgen_bool_complement ());
   
   Stat.start_timer Stat.invgen_total_time;
   
