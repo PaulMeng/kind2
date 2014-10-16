@@ -200,9 +200,7 @@ let rec collect_subterms ts calling_node_symbol (fterm:Term.T.flat) (acc:((Type.
       | [] ->
         
         let t = Term.construct f in
-        
-       (* (debug inv "########## const = %s "(Term.string_of_term t) end);*)
-        
+                
         let t_type = Term.type_of_term t in
         
         (
@@ -223,9 +221,7 @@ let rec collect_subterms ts calling_node_symbol (fterm:Term.T.flat) (acc:((Type.
     (match acc with
       | [] ->
        
-        let t = Term.construct variable in
-        
-       (* (debug inv "########## var = %s "(Term.string_of_term t) end);*)
+        let t = Term.construct variable in        
         
         let var_type = Term.type_of_term t in
         
@@ -557,9 +553,7 @@ let update_graph chains =
             (*If n0_1 and n1_0 are empty, add an edge of n0_0 -> n1_1*)
             if src_list_1 = [] && dest_list_0 = [] then
               (
-                
-                (*(debug inv "src0 -> dest1 edge: %s ----->  %s" (Term.string_of_term src_rep_0) (Term.string_of_term dest_rep_1) end);*)
-                
+                                
                 edge_hashtbl_safe_add new_outgoing_hashtl src_rep_0 dest_rep_1;
                 edge_hashtbl_safe_add new_incoming_hashtl dest_rep_1 src_rep_0;
                 
@@ -619,13 +613,16 @@ let rebuild_graph uf_defs model =
     
       (fun rep term_list accum ->
         
-       
+       (debug inv "################## model ##################" end);
         List.iter
           (fun (var, value) ->
             
             (debug inv "%s = %s" (Var.string_of_var var) (Term.string_of_term value) end);
           )
           model;
+          
+        (debug inv "################## model ##################" end);
+        
         (*Split a node into two nodes based on their value*)  
         let (t_list_1, t_list_0) =
           
@@ -637,7 +634,7 @@ let rebuild_graph uf_defs model =
             ) term_list
             
         in                        
-        
+        (debug inv "list_1 len = %d   list_0 len = %d" (List.length t_list_1) (List.length t_list_0) end);
         match (t_list_0, t_list_1) with
         
         | ([], []) -> assert false
@@ -694,7 +691,7 @@ let is_invariant invariants term =
     invariants)
 
 (* Make candidate invariants out of the graph*)
-let mk_candidate_invariants invariants =  
+let mk_candidate_invariants invariants k =  
   (*(debug inv "$$$$$$$$$$$$$$$$$$$$  $$$$$$$$$$$$$$$$$$$$$$$$$$$$$" end);*)
   (*Make candidate invariants from nodes*)
   let candidate_invariants =
@@ -716,13 +713,28 @@ let mk_candidate_invariants invariants =
               
               (
               
-                (*Remove the name of a named term if it is names*)
+                (*Remove the name of a named term*)
                 let rep' = if Term.is_named rep then Term.term_of_named rep else rep in
                 let eq_term = Term.mk_eq [rep'; t] in
                 
                 if not (is_invariant invariants eq_term) then
-  
-                     eq_term::accum'
+                  (
+                    match (Term.var_offsets_of_term eq_term) with
+
+                    | (Some min, Some max) when (Numeral.equal k Numeral.zero) -> 
+                        
+                        if (Numeral.equal Numeral.zero min) then
+                          
+                          accum'
+                          
+                        else if (Numeral.equal Numeral.one min) then
+                          
+                          eq_term::accum'
+                          
+                        else assert false                                                                   
+                      
+                    |_ -> eq_term::accum'
+                  )                     
                     
                 else 
                   
@@ -752,10 +764,27 @@ let mk_candidate_invariants invariants =
             let source' = if Term.is_named source then Term.term_of_named source else source in
             let t' = if Term.is_named t then Term.term_of_named t else t in
             let inv' = Term.mk_implies [source'; t'] in
+              
             (*(debug inv "*****  edge candidate invariant = %s" (Term.string_of_term inv') end);*)
             if not (is_invariant invariants inv') then
-              
-              inv'::accum'
+              (    
+                    (*Only make candidate invariants with one-state vars at k = 0*)
+                    match (Term.var_offsets_of_term inv') with
+
+                    | (Some min, Some max) when (Numeral.equal k Numeral.zero) -> 
+                        
+                        if (Numeral.equal Numeral.zero min) then
+                          
+                          accum'
+                          
+                        else if (Numeral.equal Numeral.one min) then
+                          
+                          inv'::accum'
+                          
+                        else assert false                                                                   
+                      
+                    |_ -> inv'::accum'
+              ) 
               
             else 
               
@@ -838,13 +867,16 @@ let remove_trivial_invariants invariants =
 let rec instantiate_invariant_upto_top_node paired_up_invariants accum ts =
   
   match paired_up_invariants with
-
+  
+  (*accum is a pair of two list; The first list contains all the top nodes invariants*)
+  (* The second list contains non-top node invariants*)
   | [] -> accum
 
   | (symbol, term)::tl -> 
     
     (
-      (*(debug inv "called node symbol = %s" (UfSymbol.string_of_uf_symbol symbol) end);*)
+      
+      (*Find all its calling nodes for "symbol"*)
       let calling_node_list = 
         
         try 
@@ -855,10 +887,10 @@ let rec instantiate_invariant_upto_top_node paired_up_invariants accum ts =
       
       in
       
+      (*Instantiate one level up *)
       let paired_up_invariants' = 
         
-        List.map
-        
+        List.map        
           (fun (calling_symbol, var_value_list) ->                      
             (*(debug inv "calling node symbol = %s for term = %s" (UfSymbol.string_of_uf_symbol calling_symbol) (Term.string_of_term term) end);*)
             let let_binding_term = 
@@ -873,30 +905,29 @@ let rec instantiate_invariant_upto_top_node paired_up_invariants accum ts =
       in
       
       let accum' = 
-        
+        (*Check if reaching the very top node*)
         match calling_node_list with
 
         | [] -> 
           
           (
-            let trans_top = TransSys.trans_top ts 
-            
+            let trans_top = TransSys.trans_top ts             
             in
             
+            (*Compare with top node symbol*)
             if UfSymbol.equal_uf_symbols (fst trans_top) symbol then
               
-              let var_value_list = snd trans_top in
-              
-              let top_invariant = 
-                
+              let var_value_list = snd trans_top in              
+              let top_invariant =                 
                 Term.mk_let var_value_list term
               
               in
               
+              (*Add the top invariant to the first list*)
               (top_invariant::(fst accum), snd accum)
             
             else
-              
+              (*Add the non-top invariant to the second list*)
               (fst accum, term::(snd accum))            
           )
 
@@ -904,6 +935,7 @@ let rec instantiate_invariant_upto_top_node paired_up_invariants accum ts =
 
       in
       
+      (*Check again for the rest of the invariants*)
       instantiate_invariant_upto_top_node 
         (paired_up_invariants'@tl) 
         accum'
@@ -917,15 +949,15 @@ let send_out_invariants ts all_candidate_terms invariants =
   (* Pair up invariant with its node trans symbol*)
   let paired_up_invariants =
             
-    List.fold_left
-            
+    List.fold_left            
       (fun accum term ->
                 
         let var =
           List.hd (Var.VarSet.elements (Term.vars_of_term term)) 
                     
         in
-                  
+        
+        (*Find the term's node symbol from all candidate term list and pair up with it*)          
         let (node_symbol, _) = 
                   
           try
@@ -990,7 +1022,19 @@ let send_out_invariants ts all_candidate_terms invariants =
 (*Call BMC to refine implication graph*)
 let rec refine_bmc_step lock_step_driver uf_defs invariants =
   
-  let candidate_invariants = mk_candidate_invariants invariants in
+  let candidate_invariants 
+    = mk_candidate_invariants invariants (LockStepDriver.get_k lock_step_driver) 
+    
+  in
+  
+  (debug inv "**********************************" end);
+  List.iter
+  (fun t ->
+    (debug inv "candidate  = %s" (Term.string_of_term t) end);
+    )
+  candidate_invariants;
+  
+   
   
   (* Call BMC until no properties disproved at current step*)
   match (LockStepDriver.query_base lock_step_driver candidate_invariants) with
@@ -1011,11 +1055,19 @@ let rec start_inv_gen lock_step_driver all_candidate_terms ts invariants =
       
   let uf_defs = TransSys.uf_defs ts in
   
-  let candidate_invariants = mk_candidate_invariants invariants in
+  let candidate_invariants = mk_candidate_invariants invariants (LockStepDriver.get_k lock_step_driver) in
   
   match candidate_invariants with
   
-  | [] -> (debug inv "No more candidate invariants!" end);
+  | [] -> 
+    
+    if (Numeral.equal (LockStepDriver.get_k lock_step_driver) Numeral.zero) then
+      (
+        LockStepDriver.increment lock_step_driver;
+        start_inv_gen lock_step_driver all_candidate_terms ts invariants
+      )
+    else
+      (debug inv "No more candidate invariants!" end);
     
   | _ -> 
     
@@ -1028,12 +1080,14 @@ let rec start_inv_gen lock_step_driver all_candidate_terms ts invariants =
     
     in
     
+    (debug inv "candidate_invs len  = %d" (List.length candidate_invs)  end);
+    
     (* Call IND to prove invarance of candidates*)
-    let props_kind, props_not_kind = 
+    let props_not_kind, props_kind = 
       LockStepDriver.query_step lock_step_driver candidate_invs
       
     in
-    
+    (debug inv "$$$$$$$$$$$$$$$ len  = %d current k = %d" (List.length props_kind) (Numeral.to_int (LockStepDriver.get_k lock_step_driver)) end);
     LockStepDriver.increment lock_step_driver;
     
     (*Send out invariants*)
