@@ -957,6 +957,8 @@ let send_out_invariants ts all_candidate_terms invariants =
                     
         in
         
+        (debug inv "term = %s" (Term.string_of_term term) end);
+        
         (*Find the term's node symbol from all candidate term list and pair up with it*)          
         let (node_symbol, _) = 
                   
@@ -1102,7 +1104,8 @@ let inv_gen trans_sys =
   
   (*Extract candidate terms from transition system*)
   let candidate_terms = extract_candidate_terms trans_sys in
- 
+  
+  (*bool_term is a list of pairs (trans_symbol, ([current_state_bool_term_set], [pre_state_bool_term_set])*)
   let bool_terms =
     
     List.fold_left
@@ -1123,9 +1126,24 @@ let inv_gen trans_sys =
            accum 
           
          else 
-          
-           (trans_symbol, bool_term_set)::accum
-        
+          (
+            (*let pre_bool_tset, cur_bool_tset =
+              TTS.partition
+                (fun t ->
+                  match Term.var_offsets_of_term t with
+                  | (Some min, _) -> 
+                    if (Numeral.equal min Numeral.zero) then 
+                      true
+                    else 
+                      false
+                      
+                  | _ -> false
+                )
+                bool_term_set
+            in*)
+            
+            (trans_symbol, bool_term_set)::accum            
+          )                  
       )
       [] 
       candidate_terms

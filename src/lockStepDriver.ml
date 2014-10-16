@@ -294,7 +294,6 @@ let query_base { solver ; k ; init_actlit ; all_vars } terms =
    Optimisation: while getting the values, prepare terms for the
    next iteration. *)
 let rec split_closure solver k kp1 all_vars falsifiable terms =
-  
   match terms with
   | _ :: _ ->
 
@@ -578,4 +577,3 @@ tel
    indent-tabs-mode: nil
    End: 
 *)
-
