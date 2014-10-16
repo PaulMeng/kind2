@@ -22,13 +22,6 @@ open Lib
 let period = 0.5
 
 
-(* Current step in BMC *)
-let once = ref true
-
-(* Current step in IND *)
-let count = ref Numeral.zero
-
-
 (* Output statistics *)
 let print_stats () = 
 
@@ -430,9 +423,7 @@ let edge_hashtbl_safe_remove ht n_1 n_2 =
 
 (* Remove useless (isolated or empty) nodes*)
 let clean_graph _ =
-  
-  (*(debug inv "Cleaning up graph!!!!!!!!!!!!!!!!!!!" end);*)
-  
+    
   (*Clear the temporary incoming and outgoing hashtable*)
   THT.reset new_outgoing_hashtl;
   THT.reset new_incoming_hashtl;
@@ -619,7 +610,7 @@ let update_graph chains =
     
 
 (** Split nodes based on the model*)
-let rebuild_graph uf_defs model k =
+let rebuild_graph uf_defs model =
   
   (* Split nodes into chains*)
   let chains = 
@@ -628,13 +619,13 @@ let rebuild_graph uf_defs model k =
     
       (fun rep term_list accum ->
         
-    (*    
+       
         List.iter
           (fun (var, value) ->
             
             (debug inv "%s = %s" (Var.string_of_var var) (Term.string_of_term value) end);
           )
-          model;*)
+          model;
         (*Split a node into two nodes based on their value*)  
         let (t_list_1, t_list_0) =
           
@@ -642,7 +633,7 @@ let rebuild_graph uf_defs model k =
             (fun t ->
               (*(debug inv "--------- rep term = %s " (Term.string_of_term t) end);*)
               Eval.bool_of_value
-                (Eval.eval_term uf_defs model (Term.bump_state k t))
+                (Eval.eval_term uf_defs model t)
             ) term_list
             
         in                        
@@ -688,7 +679,6 @@ let rebuild_graph uf_defs model k =
           
       ) nodes_hashtl []
   in
-  once := false;
   
   (*Update the graph based on chains*)
   update_graph chains;
@@ -699,7 +689,7 @@ let rebuild_graph uf_defs model k =
 (*Is the candidate term already a known invariants*)
 let is_invariant invariants term =
   (List.exists 
-    (fun (_, t) -> 
+    (fun t -> 
       Term.equal term t) 
     invariants)
 
@@ -724,23 +714,27 @@ let mk_candidate_invariants invariants =
               
             else
               
-              (*Remove the name of a named term if it is names*)
-              let rep' = if Term.is_named rep then Term.term_of_named rep else rep in
-              let eq_term = Term.mk_eq [rep'; t] in
+              (
               
-              if not (is_invariant invariants eq_term) then
-                (
-                  count := Numeral.succ !count;
-                  (*(debug inv "*****  node candidate invariant = %s" (Term.string_of_term (Term.mk_eq [rep'; t])) end);*)
-                  ("inv_"^(Numeral.string_of_numeral !count), eq_term)::accum'
-                )
+                (*Remove the name of a named term if it is names*)
+                let rep' = if Term.is_named rep then Term.term_of_named rep else rep in
+                let eq_term = Term.mk_eq [rep'; t] in
                 
-              else accum'
+                if not (is_invariant invariants eq_term) then
+  
+                     eq_term::accum'
+                    
+                else 
+                  
+                  accum'
+              )
            ) 
           accum 
           term_list)
         
-     ) nodes_hashtl []
+     ) 
+    nodes_hashtl 
+    []
     
   in
     
@@ -754,15 +748,18 @@ let mk_candidate_invariants invariants =
         (List.fold_left
           (fun accum' t ->
             
-            count := Numeral.succ !count;
-            
+            (*Restore a named term*)
             let source' = if Term.is_named source then Term.term_of_named source else source in
             let t' = if Term.is_named t then Term.term_of_named t else t in
             let inv' = Term.mk_implies [source'; t'] in
             (*(debug inv "*****  edge candidate invariant = %s" (Term.string_of_term inv') end);*)
             if not (is_invariant invariants inv') then
-              ("inv_"^(Numeral.string_of_numeral !count), inv')::accum'
-            else accum'
+              
+              inv'::accum'
+              
+            else 
+              
+              accum'
             )
             
           accum
@@ -771,10 +768,7 @@ let mk_candidate_invariants invariants =
         outgoing_hashtl 
         candidate_invariants
   in
-  
-  
-  
-  
+
   candidate_invariants'
 
 (* Compute the difference of two lists*)
@@ -817,7 +811,7 @@ let add_true_false_terms bool_terms_list =
 let remove_trivial_invariants invariants =
 
   List.filter
-    (fun (name, inv) ->
+    (fun inv ->
       
       not
       (        
@@ -916,215 +910,6 @@ let rec instantiate_invariant_upto_top_node paired_up_invariants accum ts =
         ts
     )
     
-    
-(*Verify invariants*)
-let verify_invariants trans_sys invariants =
-  
-  let uf_defs = TransSys.uf_defs trans_sys in
-  
-  (*let ufsymbol_var_list =
-    
-    List.map
-      ( fun (s, (vars, terms)) ->
-          List.map 
-            (fun var ->
-              StateVar.uf_symbol_of_state_var (Var.state_var_of_state_var_instance var)
-            ) vars
-             
-      ) uf_defs
-  in
-  
-  let ufsymbol_set = 
-    List.fold_left
-      ( fun empty_set elt ->
-          UfSymbol.UfSymbolSet.add 
-            elt
-            empty_set
-        )
-      UfSymbol.UfSymbolSet.empty (List.flatten ufsymbol_var_list)
-  in*)
-  
-    (* Determine logic for the SMT solver *)
-  let logic = TransSys.get_logic trans_sys in
-  
-  (* Create BMC solver instance *)
-  let bmc_solver = 
-    Bmc.S.new_solver ~produce_assignments:true logic 
-  in
-  
-  (* Declare uninterpreted function symbols *)
-  TransSys.iter_state_var_declarations
-    trans_sys
-    (Bmc.S.declare_fun bmc_solver);
-  (*
-  (*declare subnodes uninterpreted function symbol for BMC*)
-  UfSymbol.UfSymbolSet.iter
-    (fun ufsymbol ->
-       Bmc.S.declare_fun bmc_solver ufsymbol)
-    ufsymbol_set;*)
-    
-  
-  (* Define functions *)
-  TransSys.iter_uf_definitions
-    trans_sys
-    (Bmc.S.define_fun bmc_solver);
-
-  (* Assert initial state constraint *)
-  Bmc.S.assert_term bmc_solver (TransSys.init_of_bound trans_sys Numeral.zero);
-  
-  (* Create IND solver instance *)
-  let ind_solver = 
-    IndStep.S.new_solver ~produce_assignments:true logic 
-  in
-  
-  (* Declare uninterpreted function symbols *)
-  TransSys.iter_state_var_declarations
-    trans_sys
-    (IndStep.S.declare_fun ind_solver);
-    
-  Compress.init (IndStep.S.declare_fun ind_solver) trans_sys;
-  (*
-  (*declare subnodes uninterpreted function symbol for IND*)  
-  UfSymbol.UfSymbolSet.iter
-    ( fun ufsymbol ->
-      
-       IndStep.S.declare_fun ind_solver ufsymbol
-       
-      ) ufsymbol_set;
-  
-  (* Define functions *)*)
-  TransSys.iter_uf_definitions
-    trans_sys
-    (IndStep.S.define_fun ind_solver);
-
-  (* Assert invariants C[x_0] 
-
-     Asserted before push, will be preserved after restart *)
-  IndStep.S.assert_term
-    ind_solver
-    (TransSys.invars_of_bound trans_sys Numeral.zero);
-  
-  (*(* Assert initial and transsys terms of all nodes*)  
-  List.iter
-    (fun ((_, (_, init_term)), (_, (_, trans_term))) ->
-      
-      Bmc.S.assert_term bmc_solver init_term;
-      Bmc.S.assert_term bmc_solver trans_term;
-      
-      IndStep.S.assert_term ind_solver trans_term;
-      
-    )
-    (TransSys.uf_defs_pairs trans_sys);*)
-  let k = ref (Numeral.pred Numeral.zero) in
-
-  IndStep.S.push ind_solver;
-
-
-  let quit_loop = ref false in
-  
-  (* Enter the bmc ind verifying loop *)
-  while not !quit_loop do
-    
-    k := (Numeral.succ !k);
-   
-    let props_valid, props_invalid =
-      
-      Bmc.bmc_step false bmc_solver trans_sys !k invariants
-      
-    in       
-    
-    let props_valid', props_invalid' =
-
-      IndStep.ind_step ind_solver trans_sys [] invariants !k
-      
-    in            
-    
-    if not (props_invalid = []) then
-      (
-        quit_loop := true;
-        
-        (debug inv "!!!!!!!!!!!!!!!!!!!! Caught some false invariants! at k = %d" (Numeral.to_int !k) end);
-        
-        
-        List.iter
-          (fun (name, inv) ->
-            (debug inv "False invariant = %s" (Term.string_of_term inv) end);
-            )
-          (List.rev_append props_invalid' (List.concat (List.map snd props_invalid)));
-      )
-    else if (props_invalid = [] && props_invalid' = []) then
-      (
-        quit_loop := true;
-        
-        (debug inv "~~~~~~~~~ All invariants are true invariants!" end); 
-      )
-    
-
-  done
-
-  
-
-(*Call BMC to refine implication graph*)
-let rec refine_bmc_step solver ts new_step k candidate_invs refined global_invariants all_vars =
-  
-  (* Call BMC until no properties disproved at current step*)
-  let (props_unknown, props_invalid, model, invariants_recvd) = 
-    
-    Bmc.bmc_invgen_step false solver ts new_step k candidate_invs global_invariants all_vars
-    
-  in
- 
-  
-  (*rebuild the graph if some candidate invariants are disproved by BMC*)
-  if not (props_invalid = []) then
-    
-    (
-      let uf_defs = TransSys.uf_defs ts in       
-    
-      rebuild_graph uf_defs model k;
-        
-      refine_bmc_step solver ts false k (mk_candidate_invariants global_invariants) false (invariants_recvd @ global_invariants) all_vars
-    )
-  else
-    (
-      (* Assert transsys terms of all nodes*)  
-      List.iter
-        (fun (_, (_, (_, trans_term))) ->
-                    
-          Bmc.S.assert_term solver (Term.bump_state k trans_term);
-          
-        )
-        (TransSys.uf_defs_pairs ts);
-      
-    )
-    
-(*run induction to check the invariance of candidate terms*)
-let refine_ind_step ind_solver ts props_kfalse candidate_invariants k =
-  
-  (*Call induction step to prove invariance of candidate terms*)
-  let props_kind, props_not_kind =
-    
-    IndStep.invgen_ind_step 
-          ind_solver 
-          ts 
-          []   
-          candidate_invariants
-          k
-  in
-  
-  (* Assert transsys terms of all nodes*)  
-  List.iter
-    (fun (_, (_, (_, trans_term))) ->
-                
-      IndStep.S.assert_term ind_solver (Term.bump_state (Numeral.succ k) trans_term);
-      
-    )
-    (TransSys.uf_defs_pairs ts);
-  
-  (*Push transition relation before entailment checking*)
-  IndStep.S.push ind_solver;
-    
-  (props_kind, props_not_kind)
 
 (* Instantiate invariants upto top node and send out them*)
 let send_out_invariants ts all_candidate_terms invariants =
@@ -1134,7 +919,7 @@ let send_out_invariants ts all_candidate_terms invariants =
             
     List.fold_left
             
-      (fun accum (_, term) ->
+      (fun accum term ->
                 
         let var =
           List.hd (Var.VarSet.elements (Term.vars_of_term term)) 
@@ -1168,14 +953,14 @@ let send_out_invariants ts all_candidate_terms invariants =
               
     in 
     
-    (* Instantiate subnodes' invariants to very top node*)
+    (* Instantiate subnodes' invariants upto the very top node*)
     let top_node_invariants_list, subnode_invariant_list = 
       
       instantiate_invariant_upto_top_node paired_up_invariants ([], []) ts
       
     in
     
-    (*Pair up invariants with names to verify them *)                
+    (*(*Pair up invariants with names to verify them *)                
     let inv' =
       
       List.map
@@ -1184,8 +969,8 @@ let send_out_invariants ts all_candidate_terms invariants =
         )
         top_node_invariants_list
     in
-    
-    verify_invariants ts inv';
+    *)
+    (*verify_invariants ts inv';*)
     
     (*Set number of invariants statistics*)
     Stat.set ((List.length top_node_invariants_list) + (Stat.get Stat.invgen_num_invs)) Stat.invgen_num_invs;
@@ -1200,10 +985,31 @@ let send_out_invariants ts all_candidate_terms invariants =
                 
       )
       top_node_invariants_list
+
+
+(*Call BMC to refine implication graph*)
+let rec refine_bmc_step lock_step_driver uf_defs invariants =
+  
+  let candidate_invariants = mk_candidate_invariants invariants in
+  
+  (* Call BMC until no properties disproved at current step*)
+  match (LockStepDriver.query_base lock_step_driver candidate_invariants) with
+
+  | None -> candidate_invariants
+
+  | Some model -> 
+    
+    (*Rebuild implicatioin graph with the model*)
+    rebuild_graph uf_defs model;
+    
+    (*Try to refine the implication graph further*)
+    refine_bmc_step lock_step_driver uf_defs invariants
+  
   
 (*Start invariants generation process*)
-let rec start_inv_gen all_candidate_terms bmc_solver ind_solver ts k invariants all_vars=
+let rec start_inv_gen lock_step_driver all_candidate_terms ts invariants =
       
+  let uf_defs = TransSys.uf_defs ts in
   
   let candidate_invariants = mk_candidate_invariants invariants in
   
@@ -1213,37 +1019,28 @@ let rec start_inv_gen all_candidate_terms bmc_solver ind_solver ts k invariants 
     
   | _ -> 
     
-    Stat.set (Numeral.to_int k) Stat.invgen_k;
+    Stat.set (Numeral.to_int (LockStepDriver.get_k lock_step_driver)) Stat.invgen_k;
     
     Stat.update_time Stat.invgen_total_time;
     
-    (*Call BMC to refind implication graph*)
-    refine_bmc_step 
-      bmc_solver 
-      ts
-      true
-      k 
-      candidate_invariants
-      false
-      []
-      all_vars;
-      
+    let candidate_invs = 
+      refine_bmc_step lock_step_driver uf_defs invariants 
+    
+    in
+    
     (* Call IND to prove invarance of candidates*)
-    let props_k_ind, props_not_k_ind = 
-      
-      refine_ind_step 
-        ind_solver 
-        ts 
-        [] 
-        (mk_candidate_invariants invariants)
-        k
+    let props_kind, props_not_kind = 
+      LockStepDriver.query_step lock_step_driver candidate_invs
       
     in
     
-    send_out_invariants ts all_candidate_terms (remove_trivial_invariants props_k_ind);
+    LockStepDriver.increment lock_step_driver;
+    
+    (*Send out invariants*)
+    send_out_invariants ts all_candidate_terms (remove_trivial_invariants props_kind);
     
     (*Start inv_gen with remaining candidates*)
-    start_inv_gen all_candidate_terms bmc_solver ind_solver ts (Numeral.succ k) (props_k_ind @ invariants) all_vars 
+    start_inv_gen lock_step_driver all_candidate_terms ts (props_kind @ invariants) 
 
 
 (* Generate invariants from candidate terms*)
@@ -1309,6 +1106,7 @@ let inv_gen trans_sys =
        ) t
   ) bool_terms;*)
   
+  let lock_step_driver = LockStepDriver.create trans_sys in
   
   let uf_defs = TransSys.uf_defs trans_sys in
   
@@ -1338,75 +1136,6 @@ let inv_gen trans_sys =
   in
     
   
-  (* Determine logic for the SMT solver *)
-  let logic = TransSys.get_logic trans_sys in
-  
-  (* Create BMC solver instance *)
-  let bmc_solver = 
-    Bmc.S.new_solver ~produce_assignments:true logic 
-  in
-  
-  (* Declare uninterpreted function symbols *)
-  TransSys.iter_state_var_declarations
-    trans_sys
-    (Bmc.S.declare_fun bmc_solver);
-  
-  UfSymbol.UfSymbolSet.iter
-    ( fun ufsymbol ->
-       Bmc.S.declare_fun bmc_solver ufsymbol
-      ) ufsymbol_set;
-    
-  
-  (* Define functions *)
-  TransSys.iter_uf_definitions
-    trans_sys
-    (Bmc.S.define_fun bmc_solver);
-
-  (* Assert initial state constraint *)
-  Bmc.S.assert_term bmc_solver (TransSys.init_of_bound trans_sys Numeral.zero);
-  
-  (* Create IND solver instance *)
-  let ind_solver = 
-    IndStep.S.new_solver ~produce_assignments:true logic 
-  in
-  
-  (* Declare uninterpreted function symbols *)
-  TransSys.iter_state_var_declarations
-    trans_sys
-    (IndStep.S.declare_fun ind_solver);
-    
-  Compress.init (IndStep.S.declare_fun ind_solver) trans_sys;
-  
-  (*Declare ufsymbols of variables*)  
-  UfSymbol.UfSymbolSet.iter
-    ( fun ufsymbol ->
-       IndStep.S.declare_fun ind_solver ufsymbol
-      ) ufsymbol_set;
-  
-  (* Define functions *)
-  TransSys.iter_uf_definitions
-    trans_sys
-    (IndStep.S.define_fun ind_solver);
-
-  (* Assert invariants C[x_0] 
-
-     Asserted before push, will be preserved after restart *)
-  IndStep.S.assert_term
-    ind_solver
-    (TransSys.invars_of_bound trans_sys Numeral.zero);
-  
-  (* Assert initial and transsys terms of all nodes*)  
-  List.iter
-    (fun ((_, (_, init_term)), (_, (_, trans_term))) ->
-      
-      Bmc.S.assert_term bmc_solver init_term;
-      
-      IndStep.S.assert_term ind_solver trans_term;
-      
-    )
-    (TransSys.uf_defs_pairs trans_sys);
-
-  IndStep.S.push ind_solver;
     
   if not (bool_terms = []) then
     
@@ -1443,9 +1172,8 @@ let inv_gen trans_sys =
           [] 
           bool_terms
       in
-        
            
-      start_inv_gen candidate_terms bmc_solver ind_solver trans_sys Numeral.zero [] all_vars
+      start_inv_gen lock_step_driver candidate_terms trans_sys []
       
     )
     
