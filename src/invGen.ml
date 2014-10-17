@@ -631,7 +631,7 @@ let rebuild_graph uf_defs model k =
     
       (fun rep term_list accum ->
         
-       (debug inv "################## model ##################" end);
+       (*(debug inv "################## model ##################" end);
         List.iter
           (fun (var, value) ->
             
@@ -639,7 +639,7 @@ let rebuild_graph uf_defs model k =
           )
           model;
           
-        (debug inv "################## model ##################" end);    
+        (debug inv "################## model ##################" end);    *)
                                  
         
         (*Split a node into two nodes based on their values*)  
@@ -789,9 +789,7 @@ let mk_candidate_invariants invariants k =
         )
         outgoing_hashtl 
         candidate_invariants
-  in
-  
-  (debug inv "candidate invariants length after making = %d" (List.length candidate_invariants') end);
+  in    
 
   candidate_invariants'
 
@@ -1075,7 +1073,9 @@ let rec start_inv_gen lock_step_driver all_candidate_terms ts invariants  =
     let props_not_kind, props_kind = 
       LockStepDriver.query_step lock_step_driver candidate_invs
       
-    in       
+    in 
+    
+    LockStepDriver.increment lock_step_driver;      
     
     (*Broadcast invariants*)
     send_out_invariants lock_step_driver ts all_candidate_terms (remove_trivial_invariants props_kind);
