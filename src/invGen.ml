@@ -1062,6 +1062,7 @@ let rec start_inv_gen lock_step_driver all_candidate_terms ts invariants  =
     
     Stat.update_time Stat.invgen_total_time;        
     
+    (*Check with BASE to update implication graph*)
     let candidate_invs = 
       refine_bmc_step lock_step_driver uf_defs invariants []
     
@@ -1069,12 +1070,13 @@ let rec start_inv_gen lock_step_driver all_candidate_terms ts invariants  =
     
     (*(debug inv "candidate_invs len  = %d" (List.length candidate_invs)  end);*)
     
-    (* Call IND to prove invarance of candidates*)
+    (* Check with STEP to prove invarance of candidate invariants*)
     let props_not_kind, props_kind = 
       LockStepDriver.query_step lock_step_driver candidate_invs
       
     in 
     
+    (*Increment lock step driver to next k*)
     LockStepDriver.increment lock_step_driver;      
     
     (*Broadcast invariants*)
