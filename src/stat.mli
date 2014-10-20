@@ -170,6 +170,9 @@ val invgen_k : int_item
 (** The number of invariants discovered*)
 val invgen_num_invs : int_item
 
+(** The number of fake invariants discovered*)
+val invgen_num_fake_invs : int_item
+
 (** Total time in BMC *)
 val invgen_total_time : float_item
 

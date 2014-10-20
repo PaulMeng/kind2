@@ -312,16 +312,20 @@ let invgen_k =
 let invgen_num_invs = 
   empty_item "Number of invariants" 0
 
+let invgen_num_fake_invs = 
+  empty_item "Number of fake invariants" 0
+
 let invgen_total_time = 
   empty_item "Total time" 0.
 
 (* Title for BMC statistics *)
 let invgen_stats_title = "INVGEN"
 
-(* All BMC statistics *)
+(* All INVGEN statistics *)
 let invgen_stats = 
   [ I invgen_k;
     I invgen_num_invs;
+    I invgen_num_fake_invs;
     F invgen_total_time ] 
 
 (* Stop and record all times *)

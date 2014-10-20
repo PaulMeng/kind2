@@ -85,6 +85,11 @@ let rec merge_in accum (t, s) target =
       
       merge_in ((t', s')::accum) (t, s) tl    
 
+(*Check if a init term has offset 1*)
+let has_offset_1 term =
+  match Term.var_offsets_of_term term with
+  | (_, Some max) -> Numeral.equal Numeral.one max
+  | _ -> false
 
 (* Make mode terms from mode variables*)
 let rec make_mode_var_equations t ubound lbound acc =
@@ -136,10 +141,17 @@ let rec collect_subterms ts calling_node_symbol (fterm:Term.T.flat) (acc:((Type.
           
          (* (debug inv "calling subnode = %s " (UfSymbol.string_of_uf_symbol (fst uf_def)) end);*)
           
+          let uf_vars' =
+            List.map
+              (fun var ->                 
+                Var.bump_offset_of_state_var_instance (Numeral.of_int (-1)) var )
+              uf_vars; 
+          in                                                     
+                                                                                                   
           (* Paire up variables and values *)
           let var_value_pair_list = 
             
-            List.combine uf_vars l
+            List.combine uf_vars' l
             
           in
           
@@ -151,9 +163,16 @@ let rec collect_subterms ts calling_node_symbol (fterm:Term.T.flat) (acc:((Type.
             );            
           
           (* Make let bindings for the uninterpreted function*)
+          let uf_term' =
+            if has_offset_1 uf_term then
+              Term.bump_state (Numeral.of_int (-1)) uf_term
+            else 
+              uf_term
+          in
+            
           let let_binding_uf_term = 
             
-            Term.mk_let var_value_pair_list uf_term
+            Term.mk_let var_value_pair_list uf_term'
             
           in                   
           
@@ -272,12 +291,6 @@ let rec termset_of_list = function
   | [] -> TTS.empty
   | hd::tl -> TTS.add hd (termset_of_list tl)
 
-(*Check if a init term has offset 1*)
-let has_offset_1 term =
-  match Term.var_offsets_of_term term with
-  | (_, Some max) -> Numeral.equal Numeral.one max
-  | _ -> false
-
 (** Extract canddiate terms from uf_defs*)
 let extract_candidate_terms ts =
       
@@ -304,7 +317,9 @@ let extract_candidate_terms ts =
             match flat_term with
 
             | Term.T.App (s, l) when (Symbol.equal_symbols s Symbol.s_and) ->              
-              
+(*              List.iter
+                ( fun term -> (debug inv "init term = %s" (Term.string_of_term term) end);)
+                l;*)
               termset_of_list l 
               
             | _ -> TTS.singleton init_def
@@ -316,7 +331,9 @@ let extract_candidate_terms ts =
             match flat_term with
 
             | Term.T.App (s, l) when (Symbol.equal_symbols s Symbol.s_and) ->
-       
+              (*List.iter
+                ( fun term -> (debug inv "trans term = %s" (Term.string_of_term term) end);)
+                l;      *) 
               termset_of_list l 
               
             | _ -> TTS.singleton trans_def
@@ -804,19 +821,6 @@ let mk_candidate_invariants invariants k =
 
   candidate_invariants'
 
-(* Compute the difference of two lists*)
-let subtract_list l_1 l_2 = 
-  
-  let l_2' = List.map (fun (n, t) -> t) l_2 in
-  
-  List.fold_left
-    (fun acc (name, inv) ->
-      if (List.mem inv l_2') then
-        acc
-      else
-        (name, inv)::acc
-      ) [] l_1
-
 (* Add "TRUE" "FALSE" terms to the boolean candidate terms list*)    
 let add_true_false_terms bool_terms_list =
   
@@ -897,6 +901,13 @@ let rec instantiate_invariant_upto_top_node paired_up_invariants accum ts =
         List.map        
           (fun (calling_symbol, var_value_list) ->                      
             (*(debug inv "calling node symbol = %s for term = %s" (UfSymbol.string_of_uf_symbol calling_symbol) (Term.string_of_term term) end);*)
+            (*List.iter
+              (fun (var,value) ->
+                (debug inv "var = %s value = %s" (Var.string_of_var var) (Term.string_of_term value) end);
+              )
+              var_value_list;*)
+            
+            
             let let_binding_term =               
               Term.mk_let var_value_list term
             
@@ -921,7 +932,18 @@ let rec instantiate_invariant_upto_top_node paired_up_invariants accum ts =
             (*Compare with top node symbol*)
             if UfSymbol.equal_uf_symbols (fst trans_top) symbol then
               
-              let var_value_list = snd trans_top in              
+              let var_value_list = 
+                List.map 
+                  (fun (var, value) ->
+                    (*(debug inv "var = %s    value = %s" (Var.string_of_var var) (Term.string_of_term value) end);*)
+                    
+                    ((Var.bump_offset_of_state_var_instance (Numeral.of_int (-1)) var), (Term.bump_state (Numeral.of_int (-1)) value))
+                    
+                  )
+                  (snd trans_top)
+                
+              in
+                            
               let top_invariant =                 
                 Term.mk_let var_value_list term
               
@@ -945,7 +967,60 @@ let rec instantiate_invariant_upto_top_node paired_up_invariants accum ts =
         accum'
         ts
     )
-    
+
+(* Subtract elements of l_2 from l_1*)
+let list_subtraction l_1 l_2 = 
+
+  List.fold_left
+    (fun acc inv ->
+      if (List.mem inv l_2) then
+        acc
+      else
+        inv::acc
+    ) 
+    [] 
+    l_1    
+            
+(*Verify generated invariants*)
+let rec start_verify driver invs trans_sys =
+  if not (invs = []) then
+    (
+      (*(debug inv "verifing ......... with %d more invs to prove at k = %d" (List.length invs) (Numeral.to_int (LockStepDriver.get_k driver)) end);*)
+      match (LockStepDriver.query_base driver invs) with
+      | None -> 
+        let _, invs_kind = LockStepDriver.query_step driver invs in
+        LockStepDriver.new_invariants driver invs_kind;
+        LockStepDriver.increment driver;
+        
+        start_verify driver (list_subtraction invs invs_kind) trans_sys
+        
+      | Some model ->
+        
+        (*(debug inv "!!!!!!!!!!!!!! Found fake invariants!!!!!!!!! at k = %d" (Numeral.to_int (LockStepDriver.get_k driver)) end);*)     
+        let inv', fake_inv = 
+          List.partition
+            (fun  t ->
+              (Eval.bool_of_value (Eval.eval_term (TransSys.uf_defs trans_sys) model t))                 
+            )
+            invs
+         in
+         
+         Stat.set ((List.length fake_inv) + (Stat.get Stat.invgen_num_fake_invs)) Stat.invgen_num_fake_invs;
+        
+         start_verify driver inv' trans_sys
+    )
+  else 
+    ()
+    (*((debug inv "All invariants are true invariants !!! " end);)*)
+
+let verify_invariants trans_sys invs =
+  
+  let driver = LockStepDriver.create trans_sys in
+  
+  LockStepDriver.increment driver;
+  
+  start_verify driver invs trans_sys
+  
 
 (* Instantiate invariants upto top node and send out them*)
 let send_out_invariants lock_step_solver ts all_candidate_terms invariants =
@@ -1011,7 +1086,7 @@ let send_out_invariants lock_step_solver ts all_candidate_terms invariants =
         top_node_invariants_list
     in
     *)
-    (*verify_invariants ts inv';*)
+    verify_invariants ts top_node_invariants_list;
     
     (*Set number of invariants statistics*)
     Stat.set ((List.length top_node_invariants_list) + (Stat.get Stat.invgen_num_invs)) Stat.invgen_num_invs;
@@ -1021,7 +1096,7 @@ let send_out_invariants lock_step_solver ts all_candidate_terms invariants =
     (*Send out top node invariants*)
     List.iter
       (fun inv ->
-        (debug inv "%s" (Term.string_of_term (Term.eval_t (fun ft _ -> Term.construct ft) inv)) end);
+        (*(debug inv "%s" (Term.string_of_term (Term.eval_t (fun ft _ -> Term.construct ft) inv)) end);*)
         Event.invariant inv
                 
       )
