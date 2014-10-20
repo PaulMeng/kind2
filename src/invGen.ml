@@ -157,6 +157,8 @@ let rec collect_subterms ts calling_node_symbol (fterm:Term.T.flat) (acc:((Type.
             
           in
           
+          (debug inv "extracting node : %s   term = %s" (UfSymbol.string_of_uf_symbol uf_symbol_of_term_symbol) (Term.string_of_term let_binding_uf_term) end);
+          
           (* Recurse into the uninterpreted function to extract subterms*)
           extract_terms ts uf_symbol_of_term_symbol let_binding_uf_term
                                           
@@ -272,6 +274,12 @@ let rec termset_of_list = function
   | [] -> TTS.empty
   | hd::tl -> TTS.add hd (termset_of_list tl)
 
+(*Check if a init term has offset 1*)
+let has_offset_1 term =
+  match Term.var_offsets_of_term term with
+  | (_, Some max) -> Numeral.equal Numeral.one max
+  | _ -> false
+
 (** Extract canddiate terms from uf_defs*)
 let extract_candidate_terms ts =
       
@@ -282,6 +290,7 @@ let extract_candidate_terms ts =
     
       (fun (init_pred, trans_pred) ->
         
+        (debug inv "trans symbol : %s " (UfSymbol.string_of_uf_symbol (fst trans_pred)) end);
         (*Decompose the AND term into small ones and extract both sides of equation terms*)
         let init_def = snd (snd init_pred) in
         
@@ -297,7 +306,7 @@ let extract_candidate_terms ts =
             
             match flat_term with
 
-            | Term.T.App (s, l) when (Symbol.equal_symbols s Symbol.s_and) ->
+            | Term.T.App (s, l) when (Symbol.equal_symbols s Symbol.s_and) ->              
               
               termset_of_list l 
               
@@ -310,7 +319,7 @@ let extract_candidate_terms ts =
             match flat_term with
 
             | Term.T.App (s, l) when (Symbol.equal_symbols s Symbol.s_and) ->
-              
+       
               termset_of_list l 
               
             | _ -> TTS.singleton trans_def
@@ -334,7 +343,11 @@ let extract_candidate_terms ts =
 
                 List.fold_left
                   (fun accum elt->
-                    TTS.add elt accum
+                    
+                    if has_offset_1 elt then
+                      TTS.add (Term.bump_state (Numeral.of_int (-1)) elt) accum
+                    else
+                      TTS.add elt accum
                   )
                   term_set
                   l
@@ -370,7 +383,8 @@ let extract_candidate_terms ts =
 
         (fst trans_pred, extracted_init_trans_terms_set)
         
-      ) (TransSys.uf_defs_pairs ts)
+      ) 
+      (TransSys.uf_defs_pairs ts)
   in
   
   term_sets_list
@@ -1138,8 +1152,8 @@ let inv_gen trans_sys =
        ) t
   ) candidate_terms;*)
   
-  
-(*    List.iter
+  (*
+    List.iter
     (fun (trans_s, t) ->
      
       (debug inv "Extract symbol trans = %s   $$$$$$$$$$$$    " (UfSymbol.string_of_uf_symbol trans_s) end);
