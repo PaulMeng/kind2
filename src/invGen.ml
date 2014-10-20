@@ -155,9 +155,7 @@ let rec collect_subterms ts calling_node_symbol (fterm:Term.T.flat) (acc:((Type.
             
             Term.mk_let var_value_pair_list uf_term
             
-          in
-          
-          (debug inv "extracting node : %s   term = %s" (UfSymbol.string_of_uf_symbol uf_symbol_of_term_symbol) (Term.string_of_term let_binding_uf_term) end);
+          in                   
           
           (* Recurse into the uninterpreted function to extract subterms*)
           extract_terms ts uf_symbol_of_term_symbol let_binding_uf_term
@@ -289,8 +287,7 @@ let extract_candidate_terms ts =
     List.map
     
       (fun (init_pred, trans_pred) ->
-        
-        (debug inv "trans symbol : %s " (UfSymbol.string_of_uf_symbol (fst trans_pred)) end);
+                
         (*Decompose the AND term into small ones and extract both sides of equation terms*)
         let init_def = snd (snd init_pred) in
         
